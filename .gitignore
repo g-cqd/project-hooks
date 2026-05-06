@@ -1,0 +1,28 @@
+# macOS
+.DS_Store
+
+# SwiftPM / build products
+.build/
+.swiftpm/
+Packages/
+
+# Xcode user state
+xcuserdata/
+*.xcodeproj/xcuserdata/
+*.xcodeproj/project.xcworkspace/xcuserdata/
+*.xcworkspace/xcuserdata/
+DerivedData/
+*.xcresult/
+
+# Local release artifacts
+/project-hooks
+/project-hooks-*
+/*.tar.gz
+*.dSYM/
+
+# Logs and temporary files
+*.log
+*.tmp
+
+# Local tooling
+.claude/

@@ -1,0 +1,144 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    name: CI
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # --- Lint ---
+
+      - name: swift-format
+        if: hashFiles('.swift-format') != ''
+        run: swift format lint --strict --recursive .
+
+      - name: SwiftLint
+        if: hashFiles('.swiftlint.yml', '.swiftlint.yaml') != ''
+        run: |
+          brew install swiftlint
+          swiftlint lint --strict
+
+      - name: SwiftFormat
+        if: hashFiles('.swiftformat') != ''
+        run: |
+          brew install swiftformat
+          swiftformat --lint .
+
+      # --- Build & Test ---
+
+      - name: Build for testing
+        run: swift build --build-tests
+
+      - name: Test
+        run: swift test --skip-build
+
+  release:
+    name: Release
+    needs: ci
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: macos-26
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # --- Release ---
+      #
+      # version.txt is the single source of truth. To cut a release, bump
+      # version.txt (and Sources/GitHooksCLI/Version.swift) in a normal commit;
+      # CI tags v$VERSION and publishes a GitHub Release if that tag does not
+      # yet exist. CI never commits back to the repo and never auto-bumps.
+
+      - name: Determine version
+        id: version
+        run: |
+          VERSION=$(tr -d '[:space:]' < version.txt)
+          if [ -z "$VERSION" ]; then
+            echo "version.txt is empty" >&2
+            exit 1
+          fi
+          if ! echo "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "version.txt must contain a SemVer X.Y.Z value, got: $VERSION" >&2
+            exit 1
+          fi
+          FILE_VERSION=$(grep -Eo 'projectHooksVersion = "[^"]+"' Sources/GitHooksCLI/Version.swift | sed -E 's/.*"([^"]+)".*/\1/')
+          if [ "$FILE_VERSION" != "$VERSION" ]; then
+            echo "Version.swift ($FILE_VERSION) does not match version.txt ($VERSION)" >&2
+            exit 1
+          fi
+          TAG="v$VERSION"
+          if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; then
+            echo "Tag $TAG already exists on origin; skipping release."
+            echo "SKIP=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "SKIP=false" >> "$GITHUB_OUTPUT"
+          fi
+          echo "VERSION=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "TAG=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Build release (arm64)
+        if: steps.version.outputs.SKIP == 'false'
+        run: swift build -c release --arch arm64
+
+      - name: Build release (x86_64)
+        if: steps.version.outputs.SKIP == 'false'
+        run: |
+          cp .build/release/project-hooks project-hooks-arm64
+          swift build -c release --arch x86_64
+
+      - name: Package universal binary
+        if: steps.version.outputs.SKIP == 'false'
+        run: |
+          lipo -create project-hooks-arm64 .build/release/project-hooks \
+            -output project-hooks
+          chmod +x project-hooks
+          tar czf project-hooks-${{ steps.version.outputs.VERSION }}-macos.tar.gz \
+            project-hooks LICENSE README.md
+
+      - name: Compute checksum
+        if: steps.version.outputs.SKIP == 'false'
+        id: checksum
+        run: |
+          SHASUM=$(shasum -a 256 project-hooks-${{ steps.version.outputs.VERSION }}-macos.tar.gz | awk '{print $1}')
+          echo "SHA256=$SHASUM" >> "$GITHUB_OUTPUT"
+
+      - name: Tag commit
+        if: steps.version.outputs.SKIP == 'false'
+        run: |
+          git tag "${{ steps.version.outputs.TAG }}"
+          git push origin "${{ steps.version.outputs.TAG }}"
+
+      - name: Create GitHub Release
+        if: steps.version.outputs.SKIP == 'false'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.TAG }}
+          generate_release_notes: true
+          files: project-hooks-${{ steps.version.outputs.VERSION }}-macos.tar.gz
+          body: |
+            ## Installation
+
+            ```bash
+            tar xzf project-hooks-${{ steps.version.outputs.VERSION }}-macos.tar.gz
+            cp project-hooks ~/.local/bin/
+            ```
+
+            **SHA-256:** `${{ steps.checksum.outputs.SHA256 }}`
