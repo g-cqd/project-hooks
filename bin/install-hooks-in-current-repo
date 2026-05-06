@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+TEMPLATE_DIR="${HOME}/.git-templates"
+REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+if [[ -z "$REPO_ROOT" ]]; then
+  echo "[ERROR] Run inside a git repository." >&2
+  exit 1
+fi
+
+cp "$TEMPLATE_DIR/hooks/pre-commit" "$REPO_ROOT/.git/hooks/pre-commit"
+cp "$TEMPLATE_DIR/hooks/pre-push" "$REPO_ROOT/.git/hooks/pre-push"
+chmod +x "$REPO_ROOT/.git/hooks/pre-commit" "$REPO_ROOT/.git/hooks/pre-push"
+
+echo "[OK] Installed template hooks into $REPO_ROOT/.git/hooks"
