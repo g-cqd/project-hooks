@@ -20,9 +20,11 @@ public struct HooksConfig: Equatable {
     // MARK: - Pre-commit
 
     public struct PreCommitConfig: Equatable {
+        public var prSize: PRSizeConfig?
         public var tasks: [CustomTask]
 
-        public init(tasks: [CustomTask] = []) {
+        public init(prSize: PRSizeConfig? = nil, tasks: [CustomTask] = []) {
+            self.prSize = prSize
             self.tasks = tasks
         }
     }
@@ -474,8 +476,9 @@ extension HooksConfig {
 
     private static func parsePreCommit(_ dict: [String: Any]?) -> PreCommitConfig {
         guard let dict else { return PreCommitConfig() }
+        let prSize = parsePRSize(dict["pr-size"] as? [String: Any])
         let tasks = parseTasks(dict["tasks"] as? [[String: Any]])
-        return PreCommitConfig(tasks: tasks)
+        return PreCommitConfig(prSize: prSize, tasks: tasks)
     }
 
     private static func parsePrePush(_ dict: [String: Any]?) -> PrePushConfig {

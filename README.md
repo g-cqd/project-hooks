@@ -127,6 +127,10 @@ The complete schema for `.project-hooks.yml`:
 ```
 .project-hooks.yml
 ├── pre-commit
+│   ├── pr-size                          # Optional early-warning cognitive-load check
+│   │   └── …                                  same schema as pre-push.pr-size below
+│   │                                          baseline reused from pre-push.work-scope.base
+│   │
 │   └── tasks[]                          # Custom tasks to run on commit
 │       ├── name: string        (required)  Task identifier
 │       ├── run: string         (required)  Shell command to execute
@@ -238,6 +242,8 @@ the field reference, and the full bibliography.
 | `test-compensation` | float | `0.25` | Cap on score reduction from test files (`0` disables, `1` lets test-only PRs collapse to zero). |
 | `exclude` | `[string]` | `[]` | Glob patterns to skip entirely (generated code, lockfiles). |
 | `test-patterns` | `[string]` | built-in set | Glob patterns identifying test files for compensation. Omit to use defaults. |
+
+The same check is also available at commit time under `pre-commit.pr-size` (same schema, independent thresholds). The commit-time variant scores `merge-base(HEAD, base)..index` so it catches an oversized PR as it grows, not only at push. Baseline is reused from `pre-push.work-scope.base`.
 
 ## How it works
 
