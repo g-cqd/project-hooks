@@ -63,7 +63,38 @@ struct HooksConfigTests {
 
         #expect(config.prePush.commitMessage?.pattern == "^PROJ-\\d{4}\\s")
         #expect(config.prePush.commitMessage?.error == "Must start with PROJ-XXXX")
+        #expect(config.prePush.commitMessage?.base == nil)
         #expect(config.prePush.rejectTrailers == ["Co-authored-by"])
+    }
+
+    @Test
+    func `parse pre push commit message with base`() throws {
+        let yaml = """
+        pre-push:
+          commit-message:
+            pattern: "^PROJ-\\\\d{4}\\\\s"
+            error: "Must start with PROJ-XXXX"
+            base: "origin/develop"
+        """
+
+        let config = try HooksConfig.parse(yaml: yaml)
+
+        #expect(config.prePush.commitMessage?.base == "origin/develop")
+    }
+
+    @Test
+    func `parse pre push commit message treats empty base as nil`() throws {
+        let yaml = """
+        pre-push:
+          commit-message:
+            pattern: "^X"
+            error: "x"
+            base: ""
+        """
+
+        let config = try HooksConfig.parse(yaml: yaml)
+
+        #expect(config.prePush.commitMessage?.base == nil)
     }
 
     @Test

@@ -89,7 +89,9 @@ projects:
 └── pre-push
     ├── commit-message
     │   ├── pattern: string     (required)
-    │   └── error: string       (required)
+    │   ├── error: string       (required)
+    │   └── base: string        (optional)  baseline ref (e.g. "origin/develop"); commits
+    │                                       reachable from this ref are excluded from validation
     │
     ├── branch-name
     │   ├── pattern: string     (required)
@@ -209,6 +211,7 @@ Validates the first line of each commit being pushed against a regex pattern.
 |-------|------|----------|-------------|
 | `pattern` | `string` | **yes** | Regular expression. Each pushed commit's message (first line) is matched against this pattern. An invalid regex causes an immediate config-level failure. |
 | `error` | `string` | **yes** | Human-readable error message displayed when a commit fails validation. |
+| `base` | `string` | no | Optional baseline ref (e.g. `origin/develop`). Commits reachable from this ref are excluded from validation. Use this on long-lived integration branches whose history contains commits authored by tools (Weblate, release bots, merge commits) that pre-date this hook or that you don't control. When `base` doesn't resolve, a warning is printed and the full push range is validated (no failure). |
 
 ### `pre-push.branch-name`
 
@@ -261,7 +264,7 @@ pre-push:
 - When `merge-base(HEAD, base)` is empty (disjoint histories), same fallback applies.
 - When `merge-base(HEAD, base) == HEAD` (HEAD is already in the baseline), the changed-file set is empty and downstream checks are skipped.
 
-**Commit-message validation is unaffected by `work-scope`** — every pushed commit is still validated against `commit-message` rules, since a malformed commit shouldn't sneak through just because work-scope filters it out for lint purposes.
+**Commit-message validation is unaffected by `work-scope`** — every pushed commit is still validated against `commit-message` rules, since a malformed commit shouldn't sneak through just because work-scope filters it out for lint purposes. To exclude upstream commits from commit-message validation specifically, set `commit-message.base`.
 
 ### `pre-push.work-scope.commit-filter`
 

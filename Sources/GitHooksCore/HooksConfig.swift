@@ -93,10 +93,15 @@ public struct HooksConfig: Equatable {
     public struct CommitMessageConfig: Equatable {
         public let pattern: String
         public let error: String
+        /// Optional baseline ref (e.g. "origin/develop"). When set, commit-message validation
+        /// only checks commits in the push range that are NOT reachable from `base`. This
+        /// avoids re-validating upstream commits that a rebased branch inherits but did not author.
+        public let base: String?
 
-        public init(pattern: String, error: String) {
+        public init(pattern: String, error: String, base: String? = nil) {
             self.pattern = pattern
             self.error = error
+            self.base = base
         }
     }
 
@@ -415,7 +420,8 @@ extension HooksConfig {
         guard let dict,
               let pattern = dict["pattern"] as? String,
               let error = dict["error"] as? String else { return nil }
-        return CommitMessageConfig(pattern: pattern, error: error)
+        let base = (dict["base"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+        return CommitMessageConfig(pattern: pattern, error: error, base: base)
     }
 
     private static func parseBranchName(_ dict: [String: Any]?) -> BranchNameConfig? {

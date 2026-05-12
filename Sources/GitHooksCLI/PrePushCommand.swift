@@ -129,9 +129,20 @@ private func runCommitValidation(
         return
     }
 
-    // Commit-message validation always uses the *full* push range — a malformed commit
+    // Commit-message validation uses the *full* push range by default — a malformed commit
     // shouldn't sneak in just because work-scope filters it out for lint/test purposes.
-    let commitSHAs = try collectCommitSHAs(updates: updates, remoteName: remoteName, repoRoot: repoRoot)
+    // When `commit-message.base` is configured, exclude commits reachable from that ref so
+    // a rebased branch doesn't re-validate upstream commits it merely inherited.
+    let excludeBase = try resolveCommitMessageExcludeBase(
+        config: pushConfig?.commitMessage,
+        repoRoot: repoRoot,
+    )
+    let commitSHAs = try collectCommitSHAs(
+        updates: updates,
+        remoteName: remoteName,
+        repoRoot: repoRoot,
+        excludeBase: excludeBase,
+    )
     guard !commitSHAs.isEmpty else { return }
 
     printSection("Commit message validation")
@@ -374,18 +385,48 @@ private func runModuleBuilds(modules: [DetectedModule], repoRoot: String) throws
 
 // MARK: - Git helpers
 
-private func collectCommitSHAs(updates: [GitPushUpdate], remoteName: String, repoRoot: String) throws -> [String] {
+private func collectCommitSHAs(
+    updates: [GitPushUpdate],
+    remoteName: String,
+    repoRoot: String,
+    excludeBase: String? = nil,
+) throws -> [String] {
     var shas: [String] = []
     for update in updates {
         if update.isTagUpdate || update.isDeletion { continue }
-        let args: [String] = if update.isNewRemoteRef {
+        var args: [String] = if update.isNewRemoteRef {
             ["rev-list", update.localSHA, "--not", "--remotes=\(remoteName)"]
         } else {
             ["rev-list", "\(update.remoteSHA)..\(update.localSHA)"]
         }
+        if let excludeBase {
+            // For the new-ref form, `--not` is already in effect, so a positional ref is
+            // added to the exclusion set. For the range form, prefix with `^` to exclude.
+            args.append(update.isNewRemoteRef ? excludeBase : "^\(excludeBase)")
+        }
         try shas.append(contentsOf: gitLines(args, repoRoot: repoRoot))
     }
     return shas
+}
+
+/// Resolve the `commit-message.base` ref to a SHA. Returns nil when the field is unset
+/// or the ref cannot be resolved (a warning is printed in the latter case so the user
+/// notices the misconfiguration without blocking the push).
+private func resolveCommitMessageExcludeBase(
+    config: HooksConfig.CommitMessageConfig?,
+    repoRoot: String,
+) throws -> String? {
+    guard let base = config?.base, !base.isEmpty else { return nil }
+    if let sha = try gitFirstLine(
+        ["rev-parse", "--verify", "--quiet", base],
+        repoRoot: repoRoot,
+        allowFailure: true,
+    ) {
+        printInfo("commit-message: excluding commits reachable from '\(base)'.")
+        return sha
+    }
+    printWarn("commit-message: base '\(base)' not found — validating full push range.")
+    return nil
 }
 
 private func collectChangedFiles(
