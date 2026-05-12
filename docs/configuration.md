@@ -109,6 +109,19 @@ projects:
     │
     ├── reject-trailers: [string]
     │
+    ├── pr-size                          # Optional cognitive-load check on the pushed diff
+    │   ├── mode: enum             (optional)  warn | fail (default: warn)
+    │   ├── max-additions: int     (optional)  0 disables; default 800
+    │   ├── max-deletions: int     (optional)  0 disables; default 800
+    │   ├── max-files: int         (optional)  0 disables; default 30
+    │   ├── max-scatter: float     (optional)  0/null disables; uncapped by default
+    │   ├── max-cognitive-score: float (optional)  0 disables; default 18.0
+    │   ├── volume-weight: float   (optional)  default 1.0
+    │   ├── scatter-weight: float  (optional)  default 1.0
+    │   ├── test-compensation: float (optional)  cap on test-driven score reduction (0..1); default 0.25
+    │   ├── exclude: [string]      (optional)  glob patterns of files to skip entirely
+    │   └── test-patterns: [string] (optional)  glob patterns identifying test files
+    │
     ├── test-override
     │   ├── type: enum          (required)  xcodebuild | swift | gradle
     │   ├── project: string     (optional)  xcodebuild only
@@ -286,6 +299,87 @@ reject-trailers:
 ```
 
 A list of git trailer keys. If any pushed commit contains a trailer matching one of these keys, the push is rejected. Matching is case-sensitive and expects the standard `Key:` trailer prefix.
+
+### `pre-push.pr-size`
+
+Computes a cognitive-load score from the diff stats of the pushed range and warns
+(or blocks) when the change is too large for effective review.
+
+```yaml
+pre-push:
+  pr-size:
+    mode: warn                # warn | fail
+    max-additions: 800
+    max-deletions: 800
+    max-files: 30
+    max-cognitive-score: 18.0
+    max-scatter: null         # leave unset to score-only
+    volume-weight: 1.0
+    scatter-weight: 1.0
+    test-compensation: 0.25
+    exclude:
+      - "Package.resolved"
+      - "*.lock"
+      - "Generated/*"
+    test-patterns:            # omit to use the built-in defaults
+      - "Tests/*"
+      - "*Tests.swift"
+      - "*Spec.kt"
+```
+
+#### Formula
+
+`CL = (volume · w_v + scatter · w_s) · (1 − min(test_ratio, 1) · test_compensation)`
+
+| Term | Definition |
+|------|------------|
+| `volume` | `ln(1 + A + D)` over non-test, non-excluded lines. Log-scaling reflects sub-linear growth of review effort with size. |
+| `scatter` | Normalized Shannon entropy of changes across files (Hassan, ICSE 2009), scaled by `ln(1 + F)`. Maximum scatter is `ln(F+1)` when every file changes the same amount; zero when only one file changes. |
+| `test_ratio` | `(test_added + test_deleted) / (total_added + total_deleted)`. Test compensation caps how much a test-heavy diff can reduce the score. |
+
+Bands (informational, printed in the report):
+
+| Band | Range | Empirical anchor |
+|------|-------|------------------|
+| Small | `CL < 5` | Google median ~24 LOC, 2–3 files (Sadowski et al. ICSE 2018). |
+| Medium | `5 ≤ CL < 10` | OSS median ~44 LOC (Rigby & Bird FSE 2013). |
+| Large | `10 ≤ CL < 18` | Approaching SmartBear 200-LOC inflection (Cohen 2006). |
+| Oversized | `CL ≥ 18` | Above Cohen's 400-LOC ceiling. |
+
+#### Fields
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `mode` | enum | no | `warn` | `warn` prints the report and continues. `fail` blocks the push when any threshold is exceeded. |
+| `max-additions` | int | no | `800` | Hard cap on non-test added lines. `0` or `null` disables this check. |
+| `max-deletions` | int | no | `800` | Hard cap on non-test deleted lines. `0` or `null` disables. |
+| `max-files` | int | no | `30` | Hard cap on non-test files changed. `0` or `null` disables. |
+| `max-scatter` | float | no | unset | Hard cap on the scatter sub-score. `null`/`0` disables (default). |
+| `max-cognitive-score` | float | no | `18.0` | Hard cap on the composite cognitive-load score. `0` or `null` disables. |
+| `volume-weight` | float | no | `1.0` | Multiplier on the volume term. Lower if your reviewers handle long diffs well; raise to punish bulk. |
+| `scatter-weight` | float | no | `1.0` | Multiplier on the scatter term. Raise to disincentivize "shotgun" changes across modules. |
+| `test-compensation` | float | no | `0.25` | Maximum fraction by which test-heavy PRs can reduce their score. `0` disables compensation; `1` lets a fully-test PR collapse to zero. |
+| `exclude` | [string] | no | `[]` | Glob patterns of files to drop before any counting. Use for generated code, lockfiles, vendored sources. |
+| `test-patterns` | [string] | no | built-in set | Glob patterns identifying test files for the compensation term. Omit the key to use defaults (`Tests/*`, `*/Tests/*`, `*Tests.swift`, `*Test.kt`, etc.). An explicit empty list disables test classification entirely. |
+
+#### Scope
+
+The metric is computed over the same baseline used by `work-scope` (`merge-base(HEAD, base)..HEAD`)
+when that block is present; otherwise it falls back to the push range. Commit-filter
+results do **not** affect the metric — reviewers must read the actual tree delta
+regardless of which commits authored it. Trim with `exclude` patterns instead.
+
+#### Research grounding
+
+- Cohen, J. (2006). *Best Kept Secrets of Peer Code Review*. SmartBear/Cisco — 200–400 LOC inflection.
+- Kemerer, C. & Paulk, M. (1995). *The Impact of Design and Code Reviews on Software Quality*. IEEE TSE — review-rate vs defect detection.
+- Bacchelli, A. & Bird, C. (2013). *Expectations, Outcomes, and Challenges of Modern Code Review*. ICSE — reviewer attention budget.
+- Rigby, P. & Bird, C. (2013). *Convergent Contemporary Software Peer Review Practices*. FSE — OSS median size.
+- Sadowski, C. et al. (2018). *Modern Code Review: A Case Study at Google*. ICSE — Google median ~24 LOC.
+- Kononenko, O. et al. (2016). *Code Review Quality: How Developers See It*. ICSE — size degrades comment density.
+- Hassan, A. E. (2009). *Predicting Faults Using the Complexity of Code Changes*. ICSE — entropy as a fault predictor.
+- Nagappan, N. et al. (2010). *Change Bursts as Defect Predictors*. ISSRE — file-count signal independent of LOC.
+- Halstead, M. H. (1977). *Elements of Software Science*. Elsevier — `V = N · log₂(n)` motivating log-scaling.
 
 ### `pre-push.test-override`
 

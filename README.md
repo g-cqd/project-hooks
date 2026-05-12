@@ -154,6 +154,19 @@ The complete schema for `.project-hooks.yml`:
     │
     ├── reject-trailers: [string]        # Git trailers to reject (e.g. "Co-authored-by")
     │
+    ├── pr-size                          # Cognitive-load check on the pushed diff
+    │   ├── mode: enum             (optional)  warn | fail (default: warn)
+    │   ├── max-additions: int     (optional)  default 800; 0/null disables
+    │   ├── max-deletions: int     (optional)  default 800
+    │   ├── max-files: int         (optional)  default 30
+    │   ├── max-cognitive-score: float (optional)  default 18.0
+    │   ├── max-scatter: float     (optional)  null/0 disables
+    │   ├── volume-weight: float   (optional)  default 1.0
+    │   ├── scatter-weight: float  (optional)  default 1.0
+    │   ├── test-compensation: float (optional)  default 0.25
+    │   ├── exclude: [string]      (optional)  globs to skip entirely
+    │   └── test-patterns: [string] (optional)  globs identifying test files
+    │
     ├── test-override                    # Override auto-detected test runner
     │   ├── type: enum          (required)  xcodebuild | swift | gradle
     │   ├── project: string     (optional)  Xcode project path
@@ -207,6 +220,24 @@ A list of git trailer keys (e.g. `"Co-authored-by"`, `"Signed-off-by"`). Any pus
 | `test-plan` | `string` | no | Path to `.xctestplan` file. When provided, bundles are parsed and only bundles touching changed files are selected. |
 | `destination` | `string` | no | Xcode destination (e.g. `"platform=iOS Simulator,name=iPhone 16"`). |
 | `broad-impact-paths` | `[string]` | no | File path prefixes. If any changed file starts with one of these, the full test suite runs regardless of module detection. |
+
+#### `pre-push.pr-size`
+
+A cognitive-load score derived from `git diff --numstat`. Designed to flag PRs that
+are too large to review effectively, with the formula and defaults grounded in
+empirical software-engineering research (Cohen 2006; Hassan 2009; Sadowski et al. 2018).
+See [docs/configuration.md](docs/configuration.md#pre-pushpr-size) for the formula,
+the field reference, and the full bibliography.
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `mode` | `warn \| fail` | `warn` | `fail` blocks the push when any threshold is exceeded. |
+| `max-additions` / `max-deletions` / `max-files` | int | 800 / 800 / 30 | Hard caps on the raw counts. Set to `0` or `null` to disable. |
+| `max-cognitive-score` | float | `18.0` | Hard cap on the composite cognitive-load score. |
+| `volume-weight` / `scatter-weight` | float | `1.0` | Multipliers on the two score terms. |
+| `test-compensation` | float | `0.25` | Cap on score reduction from test files (`0` disables, `1` lets test-only PRs collapse to zero). |
+| `exclude` | `[string]` | `[]` | Glob patterns to skip entirely (generated code, lockfiles). |
+| `test-patterns` | `[string]` | built-in set | Glob patterns identifying test files for compensation. Omit to use defaults. |
 
 ## How it works
 

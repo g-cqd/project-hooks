@@ -35,6 +35,7 @@ public struct HooksConfig: Equatable {
         public var workScope: WorkScopeConfig?
         public var rejectTrailers: [String]
         public var testOverride: TestOverride?
+        public var prSize: PRSizeConfig?
         public var tasks: [CustomTask]
 
         public init(
@@ -43,6 +44,7 @@ public struct HooksConfig: Equatable {
             workScope: WorkScopeConfig? = nil,
             rejectTrailers: [String] = [],
             testOverride: TestOverride? = nil,
+            prSize: PRSizeConfig? = nil,
             tasks: [CustomTask] = [],
         ) {
             self.commitMessage = commitMessage
@@ -50,6 +52,7 @@ public struct HooksConfig: Equatable {
             self.workScope = workScope
             self.rejectTrailers = rejectTrailers
             self.testOverride = testOverride
+            self.prSize = prSize
             self.tasks = tasks
         }
     }
@@ -168,6 +171,86 @@ public struct HooksConfig: Equatable {
             self.base = base
             self.walk = walk
             self.commitFilter = commitFilter
+        }
+    }
+
+    // MARK: - PR size metric
+
+    /// Threshold and weight configuration for the PR-size cognitive-load check.
+    /// See `PRSizeMetric` for the formula and the empirical research the defaults
+    /// are calibrated against.
+    public struct PRSizeConfig: Equatable {
+        public enum Mode: String, Equatable, Sendable {
+            /// Print the report and continue. Default.
+            case warn
+            /// Print the report and block the push.
+            case fail
+        }
+
+        /// Built-in test-file patterns used when `testPatterns` is nil (i.e. the
+        /// user didn't specify the key). An explicit empty list disables test
+        /// classification entirely — every changed file then counts as production.
+        public static let defaultTestPatterns: [String] = [
+            "Tests/*",
+            "*/Tests/*",
+            "test/*",
+            "*/test/*",
+            "src/test/*",
+            "*/src/test/*",
+            "__tests__/*",
+            "*/__tests__/*",
+            "*Tests.swift",
+            "*Test.swift",
+            "*Spec.swift",
+            "*Tests.kt",
+            "*Test.kt",
+            "*Spec.kt",
+            "*Tests.java",
+            "*Test.java",
+        ]
+
+        public let mode: Mode
+        public let maxAdditions: Int?
+        public let maxDeletions: Int?
+        public let maxFiles: Int?
+        public let maxScatter: Double?
+        public let maxCognitiveScore: Double?
+        public let volumeWeight: Double
+        public let scatterWeight: Double
+        public let testCompensation: Double
+        public let exclude: [String]
+        /// When nil, `defaultTestPatterns` is used. An explicit empty list keeps
+        /// all files as production code (useful for repos with no test directory).
+        public let testPatterns: [String]?
+
+        public init(
+            mode: Mode = .warn,
+            maxAdditions: Int? = 800,
+            maxDeletions: Int? = 800,
+            maxFiles: Int? = 30,
+            maxScatter: Double? = nil,
+            maxCognitiveScore: Double? = 18.0,
+            volumeWeight: Double = 1.0,
+            scatterWeight: Double = 1.0,
+            testCompensation: Double = 0.25,
+            exclude: [String] = [],
+            testPatterns: [String]? = nil,
+        ) {
+            self.mode = mode
+            self.maxAdditions = maxAdditions
+            self.maxDeletions = maxDeletions
+            self.maxFiles = maxFiles
+            self.maxScatter = maxScatter
+            self.maxCognitiveScore = maxCognitiveScore
+            self.volumeWeight = volumeWeight
+            self.scatterWeight = scatterWeight
+            self.testCompensation = testCompensation
+            self.exclude = exclude
+            self.testPatterns = testPatterns
+        }
+
+        public var effectiveTestPatterns: [String] {
+            testPatterns ?? Self.defaultTestPatterns
         }
     }
 
@@ -403,6 +486,7 @@ extension HooksConfig {
         let workScope = parseWorkScope(dict["work-scope"] as? [String: Any])
         let rejectTrailers = dict["reject-trailers"] as? [String] ?? []
         let testOverride = parseTestOverride(dict["test-override"] as? [String: Any])
+        let prSize = parsePRSize(dict["pr-size"] as? [String: Any])
 
         let tasks = parseTasks(dict["tasks"] as? [[String: Any]])
 
@@ -412,6 +496,7 @@ extension HooksConfig {
             workScope: workScope,
             rejectTrailers: rejectTrailers,
             testOverride: testOverride,
+            prSize: prSize,
             tasks: tasks,
         )
     }
@@ -481,6 +566,80 @@ extension HooksConfig {
             onMismatch: onMismatch,
             includeMerges: includeMerges,
         )
+    }
+
+    private static func parsePRSize(_ dict: [String: Any]?) -> PRSizeConfig? {
+        guard let dict else { return nil }
+
+        let mode: PRSizeConfig.Mode
+        if let value = dict["mode"] as? String {
+            if let parsed = PRSizeConfig.Mode(rawValue: value) {
+                mode = parsed
+            } else {
+                print(
+                    "[WARN] Unknown pr-size.mode '\(value)'. Valid: warn, fail. Using warn.",
+                )
+                mode = .warn
+            }
+        } else {
+            mode = .warn
+        }
+
+        let defaults = PRSizeConfig()
+        // Tri-state semantics for thresholds and weights:
+        //   key absent       → use default
+        //   key = null / ~   → explicit nil (disables the check)
+        //   key = number     → use that value
+        // Without this distinction, `max-additions: null` would silently fall back
+        // to the default 800 — a misconfiguration footgun under `mode: fail`.
+        let maxAdditions = readInt(dict, "max-additions", default: defaults.maxAdditions)
+        let maxDeletions = readInt(dict, "max-deletions", default: defaults.maxDeletions)
+        let maxFiles = readInt(dict, "max-files", default: defaults.maxFiles)
+        let maxScatter = readDouble(dict, "max-scatter", default: defaults.maxScatter)
+        let maxCognitive = readDouble(dict, "max-cognitive-score", default: defaults.maxCognitiveScore)
+        let volumeWeight = readDouble(dict, "volume-weight", default: defaults.volumeWeight) ?? defaults.volumeWeight
+        let scatterWeight = readDouble(dict, "scatter-weight", default: defaults.scatterWeight)
+            ?? defaults.scatterWeight
+        let testCompensation = readDouble(dict, "test-compensation", default: defaults.testCompensation)
+            ?? defaults.testCompensation
+        let exclude = dict["exclude"] as? [String] ?? []
+        // Distinguish "key absent" from "explicit empty list": the latter disables defaults.
+        let testPatterns = dict["test-patterns"] as? [String]
+
+        return PRSizeConfig(
+            mode: mode,
+            maxAdditions: maxAdditions,
+            maxDeletions: maxDeletions,
+            maxFiles: maxFiles,
+            maxScatter: maxScatter,
+            maxCognitiveScore: maxCognitive,
+            volumeWeight: volumeWeight,
+            scatterWeight: scatterWeight,
+            testCompensation: testCompensation,
+            exclude: exclude,
+            testPatterns: testPatterns,
+        )
+    }
+
+    /// Read an optional int with tri-state semantics: missing key falls back to
+    /// `default`, an explicit YAML null returns nil, a parseable number is returned.
+    /// Unparseable values fall back to `default` so a typo doesn't silently disable.
+    private static func readInt(_ dict: [String: Any], _ key: String, default fallback: Int?) -> Int? {
+        guard let raw = dict[key] else { return fallback }
+        if raw is NSNull { return nil }
+        if let int = raw as? Int { return int }
+        if let str = raw as? String, let parsed = Int(str) { return parsed }
+        return fallback
+    }
+
+    /// Same as `readInt`, but for Double; accepts Int, Double, and numeric strings.
+    private static func readDouble(_ dict: [String: Any], _ key: String, default fallback: Double?) -> Double? {
+        guard let raw = dict[key] else { return fallback }
+        if raw is NSNull { return nil }
+        if let double = raw as? Double { return double }
+        if let int = raw as? Int { return Double(int) }
+        if let str = raw as? String, let parsed = Double(str) { return parsed }
+        return fallback
     }
 
     private static func parseTestOverride(_ dict: [String: Any]?) -> TestOverride? {
