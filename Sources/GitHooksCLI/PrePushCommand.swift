@@ -672,7 +672,17 @@ private func runPRSizeCheck(
         return
     }
 
-    let result = PRSizeMetric.compute(stats: stats, config: prSize)
+    try reportPRSize(stats: stats, config: prSize, blockMessage: "Push")
+}
+
+/// Render the PR-size score and decide whether to block. Shared by the pre-commit
+/// and pre-push hooks so both surface identical formatting and thresholds.
+func reportPRSize(
+    stats: [PRSizeMetric.FileStat],
+    config: HooksConfig.PRSizeConfig,
+    blockMessage: String,
+) throws {
+    let result = PRSizeMetric.compute(stats: stats, config: config)
     let score = result.score
 
     printSection("PR size check")
@@ -702,11 +712,11 @@ private func runPRSizeCheck(
         printError(violation.message)
     }
 
-    switch prSize.mode {
+    switch config.mode {
     case .warn:
         printWarn("PR size exceeds thresholds. Continuing because mode=warn.")
     case .fail:
-        printWarn("Push blocked. Split the change into smaller PRs and try again.")
+        printWarn("\(blockMessage) blocked. Split the change into smaller PRs and try again.")
         throw ExitCode(1)
     }
 }

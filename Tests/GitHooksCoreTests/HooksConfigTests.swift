@@ -233,6 +233,67 @@ struct HooksConfigTests {
 
         let config = try HooksConfig.parse(yaml: yaml)
         #expect(config.prePush.prSize == nil)
+        #expect(config.preCommit.prSize == nil)
+    }
+
+    @Test
+    func `parse pre-commit pr-size full config`() throws {
+        let yaml = """
+        pre-commit:
+          pr-size:
+            mode: fail
+            max-additions: 300
+            max-cognitive-score: 12.0
+            exclude:
+              - "Generated/*"
+        """
+
+        let config = try HooksConfig.parse(yaml: yaml)
+        let prSize = try #require(config.preCommit.prSize)
+
+        #expect(prSize.mode == .fail)
+        #expect(prSize.maxAdditions == 300)
+        #expect(prSize.maxCognitiveScore == 12.0)
+        #expect(prSize.exclude == ["Generated/*"])
+        // pre-push pr-size remains independent
+        #expect(config.prePush.prSize == nil)
+    }
+
+    @Test
+    func `parse pre-commit and pre-push pr-size are independent`() throws {
+        let yaml = """
+        pre-commit:
+          pr-size:
+            mode: warn
+            max-additions: 200
+        pre-push:
+          pr-size:
+            mode: fail
+            max-additions: 800
+        """
+
+        let config = try HooksConfig.parse(yaml: yaml)
+
+        #expect(config.preCommit.prSize?.mode == .warn)
+        #expect(config.preCommit.prSize?.maxAdditions == 200)
+        #expect(config.prePush.prSize?.mode == .fail)
+        #expect(config.prePush.prSize?.maxAdditions == 800)
+    }
+
+    @Test
+    func `parse pre-commit pr-size defaults when block is empty`() throws {
+        let yaml = """
+        pre-commit:
+          pr-size: {}
+        """
+
+        let config = try HooksConfig.parse(yaml: yaml)
+        let prSize = try #require(config.preCommit.prSize)
+        let defaults = HooksConfig.PRSizeConfig()
+
+        #expect(prSize.mode == defaults.mode)
+        #expect(prSize.maxAdditions == defaults.maxAdditions)
+        #expect(prSize.maxCognitiveScore == defaults.maxCognitiveScore)
     }
 
     @Test

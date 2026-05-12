@@ -78,6 +78,10 @@ projects:
 ```
 .project-hooks.yml
 ├── pre-commit
+│   ├── pr-size                          # Optional cognitive-load check (same schema as pre-push.pr-size)
+│   │   └── …                                  see `pre-push.pr-size` below
+│   │                                          baseline is reused from `pre-push.work-scope.base`
+│   │
 │   └── tasks[]                          # Custom tasks to run on commit
 │       ├── name: string        (required)
 │       ├── run: string         (required)
@@ -195,7 +199,15 @@ pre-push:
 
 ### `pre-commit`
 
-Contains tasks that run before each commit. These operate on staged files.
+Contains tasks that run before each commit. These operate on staged files. Also accepts an optional `pr-size` block that runs an early-warning version of the [`pre-push.pr-size`](#pre-pushpr-size) check.
+
+### `pre-commit.pr-size`
+
+Same schema and formula as [`pre-push.pr-size`](#pre-pushpr-size). The two blocks are independent — each has its own `mode` and thresholds — so you can, for example, `warn` at commit time and `fail` at push time.
+
+The metric is **branch-cumulative**: it scores `merge-base(HEAD, base)..index`, i.e. everything that would land on the branch if this commit shipped. This catches an oversized PR while it's being built, rather than only at push time. Scoring just the staged hunks would defeat the goal, since a death-by-1000-cuts PR is always fine commit-by-commit.
+
+The baseline ref is reused from [`pre-push.work-scope.base`](#pre-pushwork-scope). When that field isn't configured (or the ref can't be resolved), a warning is printed and the check is skipped — blocking commits over a config gap would be more obstructive than the check is worth.
 
 ### `pre-commit.tasks[]`
 
@@ -368,6 +380,8 @@ The metric is computed over the same baseline used by `work-scope` (`merge-base(
 when that block is present; otherwise it falls back to the push range. Commit-filter
 results do **not** affect the metric — reviewers must read the actual tree delta
 regardless of which commits authored it. Trim with `exclude` patterns instead.
+
+The same check is also available at commit time as [`pre-commit.pr-size`](#pre-commitpr-size); the two blocks share a schema but are configured independently.
 
 #### Research grounding
 
