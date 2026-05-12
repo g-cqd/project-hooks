@@ -53,6 +53,14 @@ struct PrePushCommand: ParsableCommand {
             print("  - \(file)")
         }
 
+        // --- Step 2c: PR size check (config-driven) ---
+        try runPRSizeCheck(
+            config: config,
+            updates: updates,
+            remoteName: remoteName,
+            repoRoot: repoRoot,
+        )
+
         // --- Step 3: Custom pre-push tasks ---
         try runCustomTasks(
             config?.prePush.tasks ?? [],
@@ -639,4 +647,181 @@ private func isPushingBase(update: GitPushUpdate, base: String) -> Bool {
         base
     }
     return localBranch == baseBranch
+}
+
+// MARK: - PR size check
+
+private func runPRSizeCheck(
+    config: HooksConfig?,
+    updates: [GitPushUpdate],
+    remoteName: String,
+    repoRoot: String,
+) throws {
+    guard let prSize = config?.prePush.prSize else { return }
+
+    let stats = try collectFileStats(
+        config: config,
+        updates: updates,
+        remoteName: remoteName,
+        repoRoot: repoRoot,
+    )
+
+    if stats.isEmpty {
+        // Nothing to score — defer to the rest of the pipeline. We don't print here
+        // because the changed-files block above already conveyed "no changes".
+        return
+    }
+
+    let result = PRSizeMetric.compute(stats: stats, config: prSize)
+    let score = result.score
+
+    printSection("PR size check")
+    printInfo(
+        String(
+            format: "Score %.2f (%@) — volume %.2f · scatter %.2f · entropy %.2f · test-ratio %.0f%%",
+            score.cognitiveScore,
+            score.band.label,
+            score.volume,
+            score.scatter,
+            score.entropy,
+            score.testRatio * 100,
+        ),
+    )
+    printInfo(
+        "Lines: +\(score.additions)/-\(score.deletions) prod"
+            + " · +\(score.testAdditions)/-\(score.testDeletions) tests"
+            + " · files: \(score.files) prod, \(score.testFiles) tests",
+    )
+
+    if result.violations.isEmpty {
+        printOK("PR size within configured thresholds.")
+        return
+    }
+
+    for violation in result.violations {
+        printError(violation.message)
+    }
+
+    switch prSize.mode {
+    case .warn:
+        printWarn("PR size exceeds thresholds. Continuing because mode=warn.")
+    case .fail:
+        printWarn("Push blocked. Split the change into smaller PRs and try again.")
+        throw ExitCode(1)
+    }
+}
+
+private func collectFileStats(
+    config: HooksConfig?,
+    updates: [GitPushUpdate],
+    remoteName: String,
+    repoRoot: String,
+) throws -> [PRSizeMetric.FileStat] {
+    var byPath: [String: PRSizeMetric.FileStat] = [:]
+
+    for update in updates {
+        if HookLogic.shouldSkipUpdate(update) { continue }
+        if let error = HookLogic.validateUpdateSHAs(update) {
+            throw HookError.message(error)
+        }
+
+        let stats: [PRSizeMetric.FileStat] = if let scoped = try collectScopedFileStats(
+            update: update,
+            workScope: config?.prePush.workScope,
+            repoRoot: repoRoot,
+        ) {
+            scoped
+        } else {
+            try collectFallbackFileStats(
+                update: update,
+                remoteName: remoteName,
+                repoRoot: repoRoot,
+            )
+        }
+
+        for stat in stats {
+            if let existing = byPath[stat.path] {
+                byPath[stat.path] = PRSizeMetric.FileStat(
+                    path: stat.path,
+                    added: existing.added + stat.added,
+                    deleted: existing.deleted + stat.deleted,
+                    isBinary: existing.isBinary || stat.isBinary,
+                )
+            } else {
+                byPath[stat.path] = stat
+            }
+        }
+    }
+
+    return byPath.values.sorted { $0.path < $1.path }
+}
+
+private func collectScopedFileStats(
+    update: GitPushUpdate,
+    workScope: HooksConfig.WorkScopeConfig?,
+    repoRoot: String,
+) throws -> [PRSizeMetric.FileStat]? {
+    guard let workScope else { return nil }
+    if isPushingBase(update: update, base: workScope.base) { return nil }
+
+    guard let baseSHA = try gitFirstLine(
+        ["rev-parse", "--verify", "--quiet", workScope.base],
+        repoRoot: repoRoot,
+        allowFailure: true,
+    ) else { return nil }
+
+    guard let mergeBase = try gitFirstLine(
+        ["merge-base", update.localSHA, baseSHA],
+        repoRoot: repoRoot,
+        allowFailure: true,
+    ) else { return nil }
+
+    if mergeBase == update.localSHA { return [] }
+
+    // Commit-filter intentionally does NOT apply to PR size — reviewers must read the
+    // actual tree delta regardless of which commits authored it. Teams that want to
+    // exclude generated or vendored content should use the `exclude` patterns instead.
+    return try numstatBetween(mergeBase, update.localSHA, repoRoot: repoRoot)
+}
+
+private func collectFallbackFileStats(
+    update: GitPushUpdate,
+    remoteName: String,
+    repoRoot: String,
+) throws -> [PRSizeMetric.FileStat] {
+    if update.isNewRemoteRef {
+        if let defaultRemote = try gitFirstLine(
+            ["symbolic-ref", "--quiet", "--short", "refs/remotes/\(remoteName)/HEAD"],
+            repoRoot: repoRoot,
+            allowFailure: true,
+        ),
+            let mergeBase = try gitFirstLine(
+                ["merge-base", update.localSHA, defaultRemote],
+                repoRoot: repoRoot,
+                allowFailure: true,
+            ) {
+            return try numstatBetween(mergeBase, update.localSHA, repoRoot: repoRoot)
+        }
+        // Genuinely new branch with no remote default — skip rather than enumerate
+        // every commit; the metric is most useful when there *is* a baseline.
+        return []
+    }
+
+    return try numstatBetween(update.remoteSHA, update.localSHA, repoRoot: repoRoot)
+}
+
+private func numstatBetween(
+    _ base: String,
+    _ head: String,
+    repoRoot: String,
+) throws -> [PRSizeMetric.FileStat] {
+    let result = try runCommand(
+        ["git", "diff", "--no-renames", "--numstat", "-z", "--diff-filter=ACMR", base, head, "--"],
+        currentDirectory: repoRoot,
+    )
+    guard result.exitCode == 0 else {
+        let stderr = result.stderrText.trimmingCharacters(in: .whitespacesAndNewlines)
+        throw HookError.message("git diff --numstat failed: \(stderr)")
+    }
+    return PRSizeMetric.parseNumstatZ(result.stdout)
 }

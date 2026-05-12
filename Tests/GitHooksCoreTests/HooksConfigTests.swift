@@ -98,6 +98,144 @@ struct HooksConfigTests {
     }
 
     @Test
+    func `parse pr-size full config`() throws {
+        let yaml = """
+        pre-push:
+          pr-size:
+            mode: fail
+            max-additions: 500
+            max-deletions: 400
+            max-files: 20
+            max-cognitive-score: 15.0
+            max-scatter: 3.5
+            volume-weight: 1.2
+            scatter-weight: 0.8
+            test-compensation: 0.5
+            exclude:
+              - "Generated/*"
+              - "Package.resolved"
+            test-patterns:
+              - "Specs/*"
+        """
+
+        let config = try HooksConfig.parse(yaml: yaml)
+        let prSize = try #require(config.prePush.prSize)
+
+        #expect(prSize.mode == .fail)
+        #expect(prSize.maxAdditions == 500)
+        #expect(prSize.maxDeletions == 400)
+        #expect(prSize.maxFiles == 20)
+        #expect(prSize.maxCognitiveScore == 15.0)
+        #expect(prSize.maxScatter == 3.5)
+        #expect(prSize.volumeWeight == 1.2)
+        #expect(prSize.scatterWeight == 0.8)
+        #expect(prSize.testCompensation == 0.5)
+        #expect(prSize.exclude == ["Generated/*", "Package.resolved"])
+        #expect(prSize.testPatterns == ["Specs/*"])
+    }
+
+    @Test
+    func `parse pr-size defaults when block is empty`() throws {
+        let yaml = """
+        pre-push:
+          pr-size: {}
+        """
+
+        let config = try HooksConfig.parse(yaml: yaml)
+        let prSize = try #require(config.prePush.prSize)
+        let defaults = HooksConfig.PRSizeConfig()
+
+        #expect(prSize.mode == defaults.mode)
+        #expect(prSize.maxAdditions == defaults.maxAdditions)
+        #expect(prSize.maxCognitiveScore == defaults.maxCognitiveScore)
+        #expect(prSize.testCompensation == defaults.testCompensation)
+        #expect(prSize.testPatterns == nil)
+        #expect(prSize.effectiveTestPatterns == HooksConfig.PRSizeConfig.defaultTestPatterns)
+    }
+
+    @Test
+    func `parse pr-size unknown mode falls back to warn`() throws {
+        let yaml = """
+        pre-push:
+          pr-size:
+            mode: nuke
+        """
+
+        let config = try HooksConfig.parse(yaml: yaml)
+        #expect(config.prePush.prSize?.mode == .warn)
+    }
+
+    @Test
+    func `parse pr-size empty test-patterns disables defaults`() throws {
+        let yaml = """
+        pre-push:
+          pr-size:
+            test-patterns: []
+        """
+
+        let config = try HooksConfig.parse(yaml: yaml)
+        let prSize = try #require(config.prePush.prSize)
+
+        #expect(prSize.testPatterns == [])
+        #expect(prSize.effectiveTestPatterns == [])
+    }
+
+    @Test
+    func `parse pr-size explicit null disables threshold`() throws {
+        // YAML null on a threshold should disable it (not fall back to the default).
+        let yaml = """
+        pre-push:
+          pr-size:
+            max-additions: ~
+            max-deletions: null
+            max-cognitive-score: null
+        """
+
+        let config = try HooksConfig.parse(yaml: yaml)
+        let prSize = try #require(config.prePush.prSize)
+
+        #expect(prSize.maxAdditions == nil)
+        #expect(prSize.maxDeletions == nil)
+        #expect(prSize.maxCognitiveScore == nil)
+        // Untouched keys keep their defaults
+        #expect(prSize.maxFiles == HooksConfig.PRSizeConfig().maxFiles)
+    }
+
+    @Test
+    func `parse pr-size weight null falls back to default`() throws {
+        // Weights are non-nullable on the struct; an explicit null is treated as
+        // "use the default" since a weight of 0 already means "disable that term".
+        let yaml = """
+        pre-push:
+          pr-size:
+            volume-weight: ~
+            scatter-weight: ~
+            test-compensation: ~
+        """
+
+        let config = try HooksConfig.parse(yaml: yaml)
+        let prSize = try #require(config.prePush.prSize)
+        let defaults = HooksConfig.PRSizeConfig()
+
+        #expect(prSize.volumeWeight == defaults.volumeWeight)
+        #expect(prSize.scatterWeight == defaults.scatterWeight)
+        #expect(prSize.testCompensation == defaults.testCompensation)
+    }
+
+    @Test
+    func `pr-size is nil when not configured`() throws {
+        let yaml = """
+        pre-push:
+          commit-message:
+            pattern: "."
+            error: "x"
+        """
+
+        let config = try HooksConfig.parse(yaml: yaml)
+        #expect(config.prePush.prSize == nil)
+    }
+
+    @Test
     func `parse test override`() throws {
         let yaml = """
         pre-push:
