@@ -41,7 +41,7 @@ struct CheckLocalizationCommand: ParsableCommand {
 
     @Option(
         name: .customLong("files-from"),
-        help: "Read paths from a file, one per line. Pass `-` to read from stdin."
+        help: "Read paths from a file, one per line. Pass `-` to read from stdin.",
     )
     var filesFrom: String?
 
@@ -52,7 +52,7 @@ struct CheckLocalizationCommand: ParsableCommand {
     func run() throws {
         var combined = paths
         if let filesFrom {
-            combined.append(contentsOf: try Self.readPaths(from: filesFrom))
+            try combined.append(contentsOf: Self.readPaths(from: filesFrom))
         }
         // Empty input → "scan current directory" preserves the prior
         // behaviour for ad-hoc CLI usage.
@@ -77,7 +77,7 @@ struct CheckLocalizationCommand: ParsableCommand {
             }
             if !issues.isEmpty {
                 FileHandle.standardError.write(
-                    Data("\nFound \(issues.count) localization issue(s).\n".utf8)
+                    Data("\nFound \(issues.count) localization issue(s).\n".utf8),
                 )
             }
         case .json:

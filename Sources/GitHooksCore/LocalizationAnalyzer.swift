@@ -11,20 +11,18 @@ import Foundation
 /// `LocalizedStringResource` / `LocalizedStringKey` / `verbatim:` skip
 /// rules cover the common false-positive shapes.
 public struct LocalizationAnalyzer: Sendable {
-
     // MARK: - Issue
 
     public struct Issue: Equatable, Sendable {
-
         public enum Kind: String, Sendable, Equatable {
             case missingComment
         }
 
         public let file: URL
-        public let line: Int          // 1-indexed
-        public let column: Int        // 1-indexed, byte offset
+        public let line: Int // 1-indexed
+        public let column: Int // 1-indexed, byte offset
         public let snippet: String
-        public let api: String        // e.g. "Text", "Button"
+        public let api: String // e.g. "Text", "Button"
         public let kind: Kind
 
         public init(file: URL, line: Int, column: Int, snippet: String, api: String, kind: Kind) {
@@ -46,7 +44,6 @@ public struct LocalizationAnalyzer: Sendable {
     // MARK: - Configuration
 
     public struct Configuration: Sendable, Equatable {
-
         public let allowComment: String
         public let excludedFilenameSuffixes: [String]
         public let scanHiddenDirectories: Bool
@@ -54,7 +51,7 @@ public struct LocalizationAnalyzer: Sendable {
         public init(
             allowComment: String = "not-localized",
             excludedFilenameSuffixes: [String] = ["Preview.swift", "Previews.swift", "+Preview.swift"],
-            scanHiddenDirectories: Bool = false
+            scanHiddenDirectories: Bool = false,
         ) {
             self.allowComment = allowComment
             self.excludedFilenameSuffixes = excludedFilenameSuffixes
@@ -158,7 +155,7 @@ public struct LocalizationAnalyzer: Sendable {
         for root in roots {
             for file in try swiftFiles(rooted: root) {
                 if shouldSkip(file: file) { continue }
-                issues.append(contentsOf: try analyze(file: file))
+                try issues.append(contentsOf: analyze(file: file))
             }
         }
         return issues
@@ -174,8 +171,8 @@ public struct LocalizationAnalyzer: Sendable {
     /// Pure-string variant for tests and pre-staged-content scans.
     public func analyze(file: URL, source: String) -> [Issue] {
         var issues: [Issue] = []
-        var previewDepth = 0      // open braces inside the #Preview block
-        var awaitingPreviewOpen = false  // saw #Preview but no `{` yet
+        var previewDepth = 0 // open braces inside the #Preview block
+        var awaitingPreviewOpen = false // saw #Preview but no `{` yet
         let lines = source.split(separator: "\n", omittingEmptySubsequences: false)
 
         for (index, raw) in lines.enumerated() {
@@ -191,9 +188,9 @@ public struct LocalizationAnalyzer: Sendable {
                 awaitingPreviewOpen = true
             }
             if awaitingPreviewOpen || previewDepth > 0 {
-                let opens = line.filter { $0 == "{" }.count
-                let closes = line.filter { $0 == "}" }.count
-                if awaitingPreviewOpen && opens > 0 {
+                let opens = line.count(where: { $0 == "{" })
+                let closes = line.count(where: { $0 == "}" })
+                if awaitingPreviewOpen, opens > 0 {
                     awaitingPreviewOpen = false
                     previewDepth = opens - closes
                 } else {
@@ -228,8 +225,8 @@ public struct LocalizationAnalyzer: Sendable {
                             column: column,
                             snippet: snippet,
                             api: api,
-                            kind: .missingComment
-                        )
+                            kind: .missingComment,
+                        ),
                     )
                 }
             }
@@ -261,7 +258,7 @@ public struct LocalizationAnalyzer: Sendable {
             let enumerator = fm.enumerator(
                 at: rooted,
                 includingPropertiesForKeys: [.isRegularFileKey],
-                options: enumeratorOptions
+                options: enumeratorOptions,
             )
         else {
             return []

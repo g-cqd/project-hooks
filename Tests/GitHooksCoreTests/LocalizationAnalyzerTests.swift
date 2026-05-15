@@ -4,7 +4,6 @@ import Testing
 
 @Suite("LocalizationAnalyzer — missing-comment detection")
 struct LocalizationAnalyzerTests {
-
     private let fakeURL = URL(fileURLWithPath: "/test/Fake.swift")
 
     private func analyzer() -> LocalizationAnalyzer {
@@ -13,8 +12,8 @@ struct LocalizationAnalyzerTests {
 
     // MARK: - Positive cases (should flag)
 
-    @Test("Text without comment is flagged")
-    func textWithoutComment() {
+    @Test
+    func `Text without comment is flagged`() {
         let source = #"Text("Hello")"#
         let issues = analyzer().analyze(file: fakeURL, source: source)
         #expect(issues.count == 1)
@@ -24,31 +23,31 @@ struct LocalizationAnalyzerTests {
         #expect(issues.first?.kind == .missingComment)
     }
 
-    @Test("Button without comment is flagged")
-    func buttonWithoutComment() {
+    @Test
+    func `Button without comment is flagged`() {
         let source = #"Button("Save") { save() }"#
         let issues = analyzer().analyze(file: fakeURL, source: source)
         #expect(issues.count == 1)
         #expect(issues.first?.api == "Button")
     }
 
-    @Test("navigationTitle without comment is flagged")
-    func navigationTitleWithoutComment() {
+    @Test
+    func `navigationTitle without comment is flagged`() {
         let source = #".navigationTitle("Profile")"#
         let issues = analyzer().analyze(file: fakeURL, source: source)
         #expect(issues.count == 1)
         #expect(issues.first?.api == "navigationTitle")
     }
 
-    @Test("Label first arg without comment is flagged")
-    func labelWithoutComment() {
+    @Test
+    func `Label first arg without comment is flagged`() {
         let source = #"Label("Print", systemImage: "printer")"#
         let issues = analyzer().analyze(file: fakeURL, source: source)
         #expect(issues.contains { $0.api == "Label" && $0.snippet == "Print" })
     }
 
-    @Test("Multiple issues on multi-line input")
-    func multipleIssues() {
+    @Test
+    func `Multiple issues on multi-line input`() {
         let source = """
         Text("Hi")
         Button("Save") { }
@@ -61,36 +60,36 @@ struct LocalizationAnalyzerTests {
 
     // MARK: - Negative cases (should NOT flag)
 
-    @Test("Text with comment passes")
-    func textWithComment() {
+    @Test
+    func `Text with comment passes`() {
         let source = #"Text("Hello", comment: "Greeting")"#
         let issues = analyzer().analyze(file: fakeURL, source: source)
         #expect(issues.isEmpty)
     }
 
-    @Test("verbatim: parameter passes")
-    func verbatimPasses() {
+    @Test
+    func `verbatim: parameter passes`() {
         let source = #"Text(verbatim: "Hello")"#
         let issues = analyzer().analyze(file: fakeURL, source: source)
         #expect(issues.isEmpty)
     }
 
-    @Test("LocalizedStringResource wrapper passes")
-    func lsrPasses() {
+    @Test
+    func `LocalizedStringResource wrapper passes`() {
         let source = #"Text(LocalizedStringResource("Hello", comment: "x"))"#
         let issues = analyzer().analyze(file: fakeURL, source: source)
         #expect(issues.isEmpty)
     }
 
-    @Test("Image(systemName:) is not flagged")
-    func imageSystemName() {
+    @Test
+    func `Image(systemName:) is not flagged`() {
         let source = #"Image(systemName: "checkmark")"#
         let issues = analyzer().analyze(file: fakeURL, source: source)
         #expect(issues.isEmpty)
     }
 
-    @Test("Logger calls are skipped")
-    func loggerSkipped() {
+    @Test
+    func `Logger calls are skipped`() {
         let source = #"logger.error("Failed to load")"#
         let issues = analyzer().analyze(file: fakeURL, source: source)
         #expect(issues.isEmpty)
@@ -98,18 +97,18 @@ struct LocalizationAnalyzerTests {
 
     // MARK: - Escape hatch
 
-    @Test("`// not-localized` suppresses the flag")
-    func escapeHatchSuppresses() {
+    @Test
+    func `// not-localized suppresses the flag`() {
         let source = #"Text("Internal-only") // not-localized"#
         let issues = analyzer().analyze(file: fakeURL, source: source)
         #expect(issues.isEmpty)
     }
 
-    @Test("Custom escape-hatch comment works")
-    func customEscapeHatch() {
+    @Test
+    func `Custom escape-hatch comment works`() {
         let analyzer = LocalizationAnalyzer(
             roots: [],
-            configuration: .init(allowComment: "dev-only")
+            configuration: .init(allowComment: "dev-only"),
         )
         let source = #"Text("Internal-only") // dev-only"#
         let issues = analyzer.analyze(file: fakeURL, source: source)
@@ -118,8 +117,8 @@ struct LocalizationAnalyzerTests {
 
     // MARK: - #Preview blocks
 
-    @Test("#Preview block contents are skipped")
-    func previewBlockSkipped() {
+    @Test
+    func `#Preview block contents are skipped`() {
         let source = """
         #Preview {
             Text("Preview only")
@@ -130,8 +129,8 @@ struct LocalizationAnalyzerTests {
         #expect(issues.isEmpty)
     }
 
-    @Test("Code after #Preview block is still scanned")
-    func resumeAfterPreview() {
+    @Test
+    func `Code after #Preview block is still scanned`() {
         let source = """
         #Preview { Text("Hidden") }
         Text("Visible")
@@ -143,85 +142,85 @@ struct LocalizationAnalyzerTests {
 
     // MARK: - Extended API surface (added after the Ful audit pass)
 
-    @Test(".alert without comment is flagged")
-    func alertWithoutComment() {
+    @Test
+    func `.alert without comment is flagged`() {
         let source = #".alert("Confirm Delete", isPresented: $show) { }"#
         let issues = analyzer().analyze(file: fakeURL, source: source)
         #expect(issues.contains { $0.api == "alert" && $0.snippet == "Confirm Delete" })
     }
 
-    @Test(".confirmationDialog without comment is flagged")
-    func confirmationDialogWithoutComment() {
+    @Test
+    func `.confirmationDialog without comment is flagged`() {
         let source = #".confirmationDialog("Are you sure?", isPresented: $show) { }"#
         let issues = analyzer().analyze(file: fakeURL, source: source)
         #expect(issues.contains { $0.api == "confirmationDialog" && $0.snippet == "Are you sure?" })
     }
 
-    @Test("Menu without comment is flagged")
-    func menuWithoutComment() {
+    @Test
+    func `Menu without comment is flagged`() {
         let source = #"Menu("Options") { Button("X") { } }"#
         let issues = analyzer().analyze(file: fakeURL, source: source)
         #expect(issues.contains { $0.api == "Menu" && $0.snippet == "Options" })
     }
 
-    @Test("NavigationLink without comment is flagged")
-    func navigationLinkWithoutComment() {
+    @Test
+    func `NavigationLink without comment is flagged`() {
         let source = #"NavigationLink("Open", destination: detail)"#
         let issues = analyzer().analyze(file: fakeURL, source: source)
         #expect(issues.contains { $0.api == "NavigationLink" && $0.snippet == "Open" })
     }
 
-    @Test("Link without comment is flagged")
-    func linkWithoutComment() {
+    @Test
+    func `Link without comment is flagged`() {
         let source = #"Link("Privacy Policy", destination: url)"#
         let issues = analyzer().analyze(file: fakeURL, source: source)
         #expect(issues.contains { $0.api == "Link" && $0.snippet == "Privacy Policy" })
     }
 
-    @Test("SecureField without comment is flagged")
-    func secureFieldWithoutComment() {
+    @Test
+    func `SecureField without comment is flagged`() {
         let source = #"SecureField("Password", text: $pwd)"#
         let issues = analyzer().analyze(file: fakeURL, source: source)
         #expect(issues.contains { $0.api == "SecureField" && $0.snippet == "Password" })
     }
 
-    @Test("ColorPicker without comment is flagged")
-    func colorPickerWithoutComment() {
+    @Test
+    func `ColorPicker without comment is flagged`() {
         let source = #"ColorPicker("Accent", selection: $color)"#
         let issues = analyzer().analyze(file: fakeURL, source: source)
         #expect(issues.contains { $0.api == "ColorPicker" && $0.snippet == "Accent" })
     }
 
-    @Test("GroupBox without comment is flagged")
-    func groupBoxWithoutComment() {
+    @Test
+    func `GroupBox without comment is flagged`() {
         let source = #"GroupBox("Summary") { }"#
         let issues = analyzer().analyze(file: fakeURL, source: source)
         #expect(issues.contains { $0.api == "GroupBox" && $0.snippet == "Summary" })
     }
 
-    @Test(".accessibilityLabel literal is flagged")
-    func accessibilityLabelLiteral() {
+    @Test
+    func `.accessibilityLabel literal is flagged`() {
         let source = #".accessibilityLabel("Tap to refresh")"#
         let issues = analyzer().analyze(file: fakeURL, source: source)
         #expect(issues.contains { $0.api == "accessibilityLabel" && $0.snippet == "Tap to refresh" })
     }
 
-    @Test(".accessibilityLabel(Text(verbatim:)) passes")
-    func accessibilityLabelVerbatimWrapped() {
+    @Test
+    func `.accessibilityLabel(Text(verbatim:)) passes`() {
         let source = #".accessibilityLabel(Text(verbatim: "\(value)"))"#
         let issues = analyzer().analyze(file: fakeURL, source: source)
         #expect(issues.isEmpty)
     }
 
-    @Test(".accessibilityHint literal is flagged")
-    func accessibilityHintLiteral() {
+    @Test
+    func `.accessibilityHint literal is flagged`() {
         let source = #".accessibilityHint("Opens settings")"#
         let issues = analyzer().analyze(file: fakeURL, source: source)
         #expect(issues.contains { $0.api == "accessibilityHint" && $0.snippet == "Opens settings" })
     }
 
-    @Test(".navigationSubtitle literal is flagged")
-    func navigationSubtitleLiteral() {
+    @Test
+    func `.navigationSubtitle literal is flagged`() {
         let source = #".navigationSubtitle("Last refresh: now")"#
         let issues = analyzer().analyze(file: fakeURL, source: source)
         #expect(issues.contains { $0.api == "navigationSubtitle" && $0.snippet == "Last refresh: now" })
@@ -229,22 +228,22 @@ struct LocalizationAnalyzerTests {
 
     // MARK: - String(localized:) detection
 
-    @Test("String(localized:) without comment is flagged")
-    func stringLocalizedNoComment() {
+    @Test
+    func `String(localized:) without comment is flagged`() {
         let source = #"let title = String(localized: "Hello")"#
         let issues = analyzer().analyze(file: fakeURL, source: source)
         #expect(issues.contains { $0.api == "String(localized:)" && $0.snippet == "Hello" })
     }
 
-    @Test("String(localized:) WITH comment passes")
-    func stringLocalizedWithComment() {
+    @Test
+    func `String(localized:) WITH comment passes`() {
         let source = #"let title = String(localized: "Hello", comment: "Greeting")"#
         let issues = analyzer().analyze(file: fakeURL, source: source)
         #expect(issues.isEmpty)
     }
 
-    @Test("Text(String(localized:)) is detected via the String(localized:) pattern, not Text")
-    func nestedStringLocalizedInsideText() {
+    @Test
+    func `Text(String(localized:)) is detected via the String(localized:) pattern, not Text`() {
         // Text() opens with `String(`, not `"`, so the Text regex
         // doesn't fire; the inner `String(localized:)` regex catches
         // the missing comment. Single match expected.
@@ -254,8 +253,8 @@ struct LocalizationAnalyzerTests {
         #expect(issues.first?.api == "String(localized:)")
     }
 
-    @Test("NSPredicate format string is not flagged")
-    func nsPredicateSkipped() {
+    @Test
+    func `NSPredicate format string is not flagged`() {
         let source = #"NSPredicate(format: "name == %@", value)"#
         let issues = analyzer().analyze(file: fakeURL, source: source)
         #expect(issues.isEmpty)
