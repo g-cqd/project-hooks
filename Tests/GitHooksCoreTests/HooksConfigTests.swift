@@ -463,7 +463,7 @@ struct HooksConfigTests {
     }
 
     @Test
-    func `test override without type and without skip is rejected`() throws {
+    func `override without type and without skip is rejected`() throws {
         let yaml = """
         pre-push:
           test-override:
