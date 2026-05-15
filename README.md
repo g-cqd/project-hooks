@@ -108,7 +108,7 @@ pre-push:
     project: "App.xcodeproj"
     scheme: "AppTests"
     test-plan: "config/tests.xctestplan"
-    destination: "platform=iOS Simulator,name=iPhone 16"
+    destination: "platform=iOS Simulator,name=iPhone 17 Pro"
     broad-impact-paths:
       - "App.xcodeproj/"
       - "Package.swift"
@@ -218,12 +218,15 @@ A list of git trailer keys (e.g. `"Co-authored-by"`, `"Signed-off-by"`). Any pus
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `type` | `enum` | yes | Test runner: `xcodebuild`, `swift`, or `gradle`. |
+| `type` | `enum` | yes (unless `skip: true`) | Test runner: `xcodebuild`, `swift`, or `gradle`. |
+| `skip` | `bool` | no | When `true`, disable the test stage entirely. Use this for projects whose tests live in `pre-push.tasks[]` (e.g. nested SwiftPM packages under an app project). Defaults to `false`. |
 | `project` | `string` | no | Path to `.xcodeproj` (xcodebuild only). |
 | `scheme` | `string` | no | Xcode scheme name (xcodebuild only). |
 | `test-plan` | `string` | no | Path to `.xctestplan` file. When provided, bundles are parsed and only bundles touching changed files are selected. |
-| `destination` | `string` | no | Xcode destination (e.g. `"platform=iOS Simulator,name=iPhone 16"`). |
+| `destination` | `string` | no | Xcode destination (e.g. `"platform=iOS Simulator,name=iPhone 17 Pro"`). Defaults to `generic/platform=iOS Simulator`, which lets xcodebuild pick any available simulator. |
 | `broad-impact-paths` | `[string]` | no | File path prefixes. If any changed file starts with one of these, the full test suite runs regardless of module detection. |
+
+When `xcodebuild test` exits with `There are no test bundles available to test` or `Scheme … is not currently configured for the test action`, the hook now logs a no-op info line and continues instead of blocking the push. This makes the auto-detect path safe for projects whose app scheme has no inline tests (e.g. tests delegated to nested SwiftPM packages).
 
 #### `pre-push.pr-size`
 
@@ -289,7 +292,7 @@ The same check is also available at commit time under `pre-commit.pr-size` (same
 |---|---|---|
 | `GITHOOKS_TEST_TIMEOUT_SECONDS` | `1200` | Timeout for test execution |
 | `GITHOOKS_BUILD_TIMEOUT_SECONDS` | `600` | Timeout for build steps |
-| `GITHOOKS_DESTINATION` | `platform=iOS Simulator,name=iPhone 16` | Default Xcode simulator destination |
+| `GITHOOKS_DESTINATION` | `generic/platform=iOS Simulator` | Default Xcode simulator destination. The generic form lets xcodebuild pick any available simulator; override to pin a specific device. |
 | `GITHOOKS_<LINTER>_TIMEOUT_SECONDS` | `120` | Per-linter timeout (e.g. `GITHOOKS_SWIFTLINT_TIMEOUT_SECONDS`) |
 
 ## Architecture

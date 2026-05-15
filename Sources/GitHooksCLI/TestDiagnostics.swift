@@ -62,21 +62,45 @@ private func printFailureDiagnosis(lines: [String], moduleName: String) {
     printWarn("Push blocked. Fix failing tests and push again.")
 }
 
-/// Analyze test output and print a diagnosis of what failed or hung.
-func diagnoseTestResult(_ result: CommandResult, moduleName: String, timeout: TimeInterval) {
+/// Outcome of a test runner invocation as interpreted by the diagnosis layer.
+/// Distinguishes "this module has no tests to run" (soft no-op, push proceeds)
+/// from "tests actually failed" (hard fail, push blocked).
+enum TestRunOutcome: Equatable {
+    case passed
+    case timedOut
+    case failed
+    /// Non-zero exit, but the runner didn't actually fail a test. The push
+    /// pipeline should print an info line and continue. Currently fires for
+    /// xcodebuild when the scheme has no Testables / no test action wired.
+    case noOp(TestOutputParser.NoOpExitReason)
+}
+
+/// Analyze test output and print a diagnosis of what failed, hung, or no-op'd.
+@discardableResult
+func diagnoseTestResult(
+    _ result: CommandResult,
+    moduleName: String,
+    timeout: TimeInterval,
+) -> TestRunOutcome {
     let lines = result.combinedText
         .split(whereSeparator: \.isNewline)
         .map(String.init)
 
     if result.timedOut {
         printTimeoutDiagnosis(lines: lines, moduleName: moduleName, timeout: timeout)
-        return
+        return .timedOut
     }
 
     if result.exitCode == 0 {
         printSuccessDiagnosis(lines: lines, moduleName: moduleName)
-        return
+        return .passed
+    }
+
+    if let reason = TestOutputParser.detectNoOpExitReason(lines: lines) {
+        printInfo("No-op test stage (\(moduleName)): \(reason.humanDescription). Continuing.")
+        return .noOp(reason)
     }
 
     printFailureDiagnosis(lines: lines, moduleName: moduleName)
+    return .failed
 }

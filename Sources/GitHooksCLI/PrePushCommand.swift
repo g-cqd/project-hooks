@@ -219,6 +219,11 @@ private func runTestChecks(
 ) throws {
     // Config-driven test override
     if let override = config?.prePush.testOverride {
+        if override.skip {
+            printSection("Tests (config override: skipped)")
+            printInfo("Test stage disabled by .project-hooks.yml (test-override.skip: true).")
+            return
+        }
         try runTestOverride(override, changedFiles: changedFiles, repoRoot: repoRoot)
         return
     }
@@ -259,12 +264,21 @@ private func runTestOverride(_ override: HooksConfig.TestOverride, changedFiles:
     printInfo("Timeout: \(Int(testTimeout))s")
 
     let result = try runCommand(command, currentDirectory: repoRoot, timeoutSeconds: testTimeout)
-    diagnoseTestResult(result, moduleName: override.type.rawValue, timeout: testTimeout)
+    let outcome = diagnoseTestResult(result, moduleName: override.type.rawValue, timeout: testTimeout)
 
-    if result.timedOut || result.exitCode != 0 {
+    switch outcome {
+    case .passed, .noOp:
+        return
+    case .timedOut, .failed:
         throw ExitCode(1)
     }
 }
+
+/// Default xcodebuild destination when neither `GITHOOKS_DESTINATION` nor
+/// `test-override.destination` is set. `generic/platform=iOS Simulator` lets
+/// xcodebuild pick the best available simulator instead of relying on a
+/// hardcoded model name that may not exist after Xcode/SDK upgrades.
+let defaultIOSDestination = "generic/platform=iOS Simulator"
 
 private func buildOverrideCommand(
     _ override: HooksConfig.TestOverride,
@@ -273,7 +287,7 @@ private func buildOverrideCommand(
 ) throws -> [String]? {
     let destination = ProcessInfo.processInfo.environment["GITHOOKS_DESTINATION"]
         ?? override.destination
-        ?? "platform=iOS Simulator,name=iPhone 16"
+        ?? defaultIOSDestination
 
     switch override.type {
     case .xcodebuild:
@@ -352,9 +366,12 @@ private func runModuleTests(modules: [DetectedModule], repoRoot: String) throws 
         printInfo("Timeout: \(Int(testTimeout))s")
 
         let result = try runCommand(module.testCommand, currentDirectory: repoRoot, timeoutSeconds: testTimeout)
-        diagnoseTestResult(result, moduleName: module.name, timeout: testTimeout)
+        let outcome = diagnoseTestResult(result, moduleName: module.name, timeout: testTimeout)
 
-        if result.timedOut || result.exitCode != 0 {
+        switch outcome {
+        case .passed, .noOp:
+            continue
+        case .timedOut, .failed:
             throw ExitCode(1)
         }
     }

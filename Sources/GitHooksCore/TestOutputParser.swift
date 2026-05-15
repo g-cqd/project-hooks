@@ -127,6 +127,44 @@ public enum TestOutputParser {
             }
     }
 
+    /// Reasons a test runner can exit with a non-zero status without an actual
+    /// test failure. The pre-push hook treats these as "nothing to run" so they
+    /// don't block a push.
+    public enum NoOpExitReason: Equatable, Sendable {
+        /// `xcodebuild test -scheme X` exits 65 with this message when X has no
+        /// Testables. Happens when nested SwiftPM packages own the tests and the
+        /// app scheme has no inline test target.
+        case noTestBundlesAvailable
+        /// `xcodebuild test -scheme X` exits 65 with this message when X has a
+        /// TestAction with no Testables block. Same intent as the above.
+        case schemeTestActionNotConfigured
+
+        public var humanDescription: String {
+            switch self {
+            case .noTestBundlesAvailable:
+                "the scheme exposes no test bundles"
+            case .schemeTestActionNotConfigured:
+                "the scheme has no test action configured"
+            }
+        }
+    }
+
+    /// Inspect test runner output and return a no-op reason if the runner exited
+    /// non-zero but didn't actually fail any test. Currently scoped to xcodebuild;
+    /// `swift test` and `gradle test` propagate compile/test failures directly.
+    public static func detectNoOpExitReason(lines: [String]) -> NoOpExitReason? {
+        for line in lines {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if trimmed.contains("There are no test bundles available to test") {
+                return .noTestBundlesAvailable
+            }
+            if trimmed.contains("is not currently configured for the test action") {
+                return .schemeTestActionNotConfigured
+            }
+        }
+        return nil
+    }
+
     /// Extract the test run summary line (if any).
     public static func extractTestSummary(lines: [String]) -> String? {
         // Swift Testing: "Test run with 42 tests passed after 1.234 seconds."

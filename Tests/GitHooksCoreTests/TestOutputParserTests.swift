@@ -246,4 +246,44 @@ struct TestOutputParserTests {
         let lines = ["Just some random output"]
         #expect(TestOutputParser.extractTestSummary(lines: lines) == nil)
     }
+
+    // MARK: - detectNoOpExitReason
+
+    @Test
+    func `detect no-op: no test bundles available`() {
+        let lines = [
+            "xcodebuild: error: Failed to build project Foo with scheme Foo.: There are no test bundles available to test.",
+            "Some other line",
+        ]
+        #expect(TestOutputParser.detectNoOpExitReason(lines: lines) == .noTestBundlesAvailable)
+    }
+
+    @Test
+    func `detect no-op: scheme test action not configured`() {
+        let lines = [
+            "xcodebuild: error: Scheme LotoBuddy is not currently configured for the test action.",
+        ]
+        #expect(TestOutputParser.detectNoOpExitReason(lines: lines) == .schemeTestActionNotConfigured)
+    }
+
+    @Test
+    func `detect no-op returns nil for genuine test failure`() {
+        let lines = [
+            "Test Case '-[MyTests testFoo]' failed (0.012 seconds).",
+            "** TEST FAILED **",
+        ]
+        #expect(TestOutputParser.detectNoOpExitReason(lines: lines) == nil)
+    }
+
+    @Test
+    func `detect no-op returns nil for empty output`() {
+        #expect(TestOutputParser.detectNoOpExitReason(lines: []) == nil)
+    }
+
+    @Test
+    func `detect no-op humanDescription is non-empty`() {
+        for reason in [TestOutputParser.NoOpExitReason.noTestBundlesAvailable, .schemeTestActionNotConfigured] {
+            #expect(!reason.humanDescription.isEmpty)
+        }
+    }
 }

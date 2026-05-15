@@ -281,6 +281,11 @@ public struct HooksConfig: Equatable {
         /// - swift: e.g. `--filter SomeTests`
         /// Args are passed through verbatim — quoting/escaping is the caller's responsibility.
         public let extraArgs: [String]?
+        /// When true, the test stage is skipped entirely. Useful when the test action runs
+        /// via `pre-push.tasks[]` (e.g. nested SwiftPM packages under an app project) or
+        /// when the project has no scheme-level test bundles to run. `type` becomes
+        /// optional when skipping.
+        public let skip: Bool
 
         public init(
             type: TestRunnerType,
@@ -291,6 +296,7 @@ public struct HooksConfig: Equatable {
             broadImpactPaths: [String]? = nil,
             task: String? = nil,
             extraArgs: [String]? = nil,
+            skip: Bool = false,
         ) {
             self.type = type
             self.project = project
@@ -300,6 +306,7 @@ public struct HooksConfig: Equatable {
             self.broadImpactPaths = broadImpactPaths
             self.task = task
             self.extraArgs = extraArgs
+            self.skip = skip
         }
     }
 }
@@ -646,9 +653,24 @@ extension HooksConfig {
     }
 
     private static func parseTestOverride(_ dict: [String: Any]?) -> TestOverride? {
-        guard let dict, let typeString = dict["type"] as? String else { return nil }
-        guard let runnerType = TestRunnerType(rawValue: typeString) else {
-            print("[WARN] Unknown test-override type '\(typeString)'. Valid: xcodebuild, swift, gradle.")
+        guard let dict else { return nil }
+        let skip = dict["skip"] as? Bool ?? false
+        // `type` is required by the schema, but irrelevant when skip=true. Accept the
+        // shorthand `test-override: { skip: true }` (no type) for ergonomics — the engine
+        // never runs a command in that case.
+        let typeString = dict["type"] as? String
+        let runnerType: TestRunnerType
+        if let typeString {
+            guard let parsed = TestRunnerType(rawValue: typeString) else {
+                print("[WARN] Unknown test-override type '\(typeString)'. Valid: xcodebuild, swift, gradle.")
+                return nil
+            }
+            runnerType = parsed
+        } else if skip {
+            // Placeholder; ignored at runtime when skip=true.
+            runnerType = .swift
+        } else {
+            // No type and not skipping → invalid config; behave as before.
             return nil
         }
         return TestOverride(
@@ -660,6 +682,7 @@ extension HooksConfig {
             broadImpactPaths: dict["broad-impact-paths"] as? [String],
             task: dict["task"] as? String,
             extraArgs: dict["extra-args"] as? [String],
+            skip: skip,
         )
     }
 
