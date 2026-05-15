@@ -72,23 +72,51 @@ public struct LocalizationAnalyzer: Sendable {
     /// Patterns intentionally tolerate trailing whitespace and bind
     /// up through the next `,` or `)` — the absence of `comment:` in
     /// the trailing tail is the actual lint signal.
+    ///
+    /// The list grew organically as real catalogs were audited; new
+    /// entries should mirror the SwiftUI API surface, not invent new
+    /// ones. Each addition needs a positive + negative test fixture
+    /// in `LocalizationAnalyzerTests`.
     private static let apis: [(String, String)] = [
+        // Text / typography
         ("Text", #"\bText\(\s*"([^"]+)"\s*(\)|,)"#),
         ("Button", #"\bButton\(\s*"([^"]+)"\s*(\)|,)"#),
         ("Label", #"\bLabel\(\s*"([^"]+)"\s*,"#),
+        // Controls
         ("Toggle", #"\bToggle\(\s*"([^"]+)"\s*,"#),
         ("Picker", #"\bPicker\(\s*"([^"]+)"\s*,"#),
-        ("Section", #"\bSection\(\s*"([^"]+)"\s*(\)|,)"#),
         ("TextField", #"\bTextField\(\s*"([^"]+)"\s*,"#),
-        ("navigationTitle", #"\.navigationTitle\(\s*"([^"]+)"\s*\)"#),
+        ("SecureField", #"\bSecureField\(\s*"([^"]+)"\s*,"#),
         ("DatePicker", #"\bDatePicker\(\s*"([^"]+)"\s*,"#),
         ("Stepper", #"\bStepper\(\s*"([^"]+)"\s*,"#),
+        ("ColorPicker", #"\bColorPicker\(\s*"([^"]+)"\s*,"#),
+        // Containers / sections
+        ("Section", #"\bSection\(\s*"([^"]+)"\s*(\)|,)"#),
+        ("GroupBox", #"\bGroupBox\(\s*"([^"]+)"\s*(\)|,)"#),
+        ("Menu", #"\bMenu\(\s*"([^"]+)"\s*(\)|,|\{)"#),
+        // Navigation / links
+        ("NavigationLink", #"\bNavigationLink\(\s*"([^"]+)"\s*,"#),
+        ("Link", #"\bLink\(\s*"([^"]+)"\s*,"#),
+        // View modifiers
+        ("navigationTitle", #"\.navigationTitle\(\s*"([^"]+)"\s*\)"#),
+        ("navigationSubtitle", #"\.navigationSubtitle\(\s*"([^"]+)"\s*\)"#),
+        ("alert", #"\.alert\(\s*"([^"]+)"\s*,"#),
+        ("confirmationDialog", #"\.confirmationDialog\(\s*"([^"]+)"\s*,"#),
+        ("accessibilityLabel", #"\.accessibilityLabel\(\s*"([^"]+)"\s*\)"#),
+        ("accessibilityHint", #"\.accessibilityHint\(\s*"([^"]+)"\s*\)"#),
+        ("accessibilityValue", #"\.accessibilityValue\(\s*"([^"]+)"\s*\)"#),
+        // Manual `String(localized:)` — flag when missing comment:.
+        // Single-line only; multi-line wraps still bypass detection.
+        ("String(localized:)", #"\bString\(\s*localized:\s*"([^"]+)"\s*\)"#),
     ]
 
     /// If a flagged line contains any of these substrings, treat as
-    /// already-localized / verbatim / debug-only and skip.
+    /// already-localized / verbatim / debug-only and skip. Note:
+    /// `String(localized:` is intentionally NOT in this list — we
+    /// want to detect missing-comment cases of that API too — so
+    /// the per-call check relies on `comment:` being present on the
+    /// line for legitimate uses.
     private static let skipMarkers = [
-        "String(localized:",
         "LocalizedStringResource(",
         "LocalizedStringKey(",
         "verbatim:",
@@ -102,7 +130,9 @@ public struct LocalizationAnalyzer: Sendable {
         "Image(systemName:",
         "Image(\"",
         "URL(string:",
+        "NSPredicate(format:",
         "Notification.Name(",
+        "Bundle.main.localizedString(",
     ]
 
     // MARK: - Properties
