@@ -425,6 +425,55 @@ struct HooksConfigTests {
     }
 
     @Test
+    func `parse test override skip flag`() throws {
+        let yaml = """
+        pre-push:
+          test-override:
+            type: xcodebuild
+            skip: true
+        """
+        let config = try HooksConfig.parse(yaml: yaml)
+        let override = try #require(config.prePush.testOverride)
+        #expect(override.skip)
+        #expect(override.type == .xcodebuild)
+    }
+
+    @Test
+    func `parse test override skip without type`() throws {
+        let yaml = """
+        pre-push:
+          test-override:
+            skip: true
+        """
+        let config = try HooksConfig.parse(yaml: yaml)
+        let override = try #require(config.prePush.testOverride)
+        #expect(override.skip)
+    }
+
+    @Test
+    func `parse test override defaults skip to false`() throws {
+        let yaml = """
+        pre-push:
+          test-override:
+            type: xcodebuild
+        """
+        let config = try HooksConfig.parse(yaml: yaml)
+        let override = try #require(config.prePush.testOverride)
+        #expect(!override.skip)
+    }
+
+    @Test
+    func `test override without type and without skip is rejected`() throws {
+        let yaml = """
+        pre-push:
+          test-override:
+            destination: "platform=iOS Simulator,name=iPhone 17"
+        """
+        let config = try HooksConfig.parse(yaml: yaml)
+        #expect(config.prePush.testOverride == nil)
+    }
+
+    @Test
     func `parse test override rejects unknown type`() throws {
         let yaml = """
         pre-push:

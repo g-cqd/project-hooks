@@ -180,7 +180,7 @@ If any changed file matches a `broad-impact-paths` prefix, all bundles run.
 |---|---|---|
 | `GITHOOKS_TEST_TIMEOUT_SECONDS` | `1200` | Max seconds for test execution |
 | `GITHOOKS_BUILD_TIMEOUT_SECONDS` | `600` | Max seconds for build steps |
-| `GITHOOKS_DESTINATION` | `platform=iOS Simulator,name=iPhone 16` | Xcode simulator destination |
+| `GITHOOKS_DESTINATION` | `generic/platform=iOS Simulator` | Xcode simulator destination. Defaults to the generic form so xcodebuild picks any available simulator. |
 | `GITHOOKS_<LINTER>_TIMEOUT_SECONDS` | `120` | Per-linter timeout. Replace `<LINTER>` with the uppercase linter name (e.g. `GITHOOKS_SWIFTLINT_TIMEOUT_SECONDS`) |
 
 ## Timeouts and process management

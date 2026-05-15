@@ -139,7 +139,7 @@ public enum TestTargetResolver {
                 "-scheme", projectName,
                 "-destination",
                 ProcessInfo.processInfo.environment["GITHOOKS_DESTINATION"]
-                    ?? "platform=iOS Simulator,name=iPhone 16",
+                    ?? "generic/platform=iOS Simulator",
                 "-derivedDataPath", scratchDir,
             ]
         }

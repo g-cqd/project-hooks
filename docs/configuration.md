@@ -183,7 +183,7 @@ pre-push:
     project: "App.xcodeproj"
     scheme: "AppTests"
     test-plan: "config/UnitTests.xctestplan"
-    destination: "platform=iOS Simulator,name=iPhone 16"
+    destination: "platform=iOS Simulator,name=iPhone 17 Pro"
     broad-impact-paths:
       - "App.xcodeproj/"
       - "Package.swift"
@@ -401,12 +401,17 @@ Overrides the auto-detected test runner. When not set, the tool auto-detects tes
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `type` | `enum` | **yes** | Test runner to use. One of: `xcodebuild`, `swift`, `gradle`. |
+| `type` | `enum` | **yes** (unless `skip: true`) | Test runner to use. One of: `xcodebuild`, `swift`, `gradle`. |
+| `skip` | `bool` | no | Disables the test stage entirely. Use for projects whose real tests run under `pre-push.tasks[]` (e.g. nested SwiftPM packages under an app project). When set, `type` becomes optional. Defaults to `false`. |
 | `project` | `string` | no | Path to the `.xcodeproj` file. Used with `xcodebuild` type. |
 | `scheme` | `string` | no | Xcode scheme name. Used with `xcodebuild` type. |
 | `test-plan` | `string` | no | Path to an `.xctestplan` file. When set, the tool parses the plan's JSON to extract test bundle names and maps changed files to bundles. Only matching bundles are tested. |
-| `destination` | `string` | no | Xcode destination string (e.g. `"platform=iOS Simulator,name=iPhone 16"`). Overrides the default and the `GITHOOKS_DESTINATION` env var. |
+| `destination` | `string` | no | Xcode destination string (e.g. `"platform=iOS Simulator,name=iPhone 17 Pro"`). Overrides the default and the `GITHOOKS_DESTINATION` env var. Defaults to `generic/platform=iOS Simulator`. |
 | `broad-impact-paths` | `[string]` | no | Path prefixes. If any changed file starts with one of these prefixes, **all** test bundles run regardless of file-to-bundle mapping. Useful for project files, shared modules, or CI config. |
+
+#### No-op detection
+
+When `xcodebuild test` exits non-zero with `There are no test bundles available to test` or `Scheme … is not currently configured for the test action`, the runner now treats the result as a no-op (info log) instead of a failure. This protects projects whose top-level scheme has no inline Testables and whose actual tests are delegated to packages or `pre-push.tasks[]`.
 
 ### `pre-push.tasks[]`
 
