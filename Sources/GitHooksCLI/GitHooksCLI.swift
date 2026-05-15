@@ -11,6 +11,11 @@ struct GitHooksCLI: ParsableCommand {
         .project-hooks.yml in the repo root.
         """,
         version: projectHooksVersion,
-        subcommands: [PreCommitCommand.self, PrePushCommand.self, InstallCommand.self],
+        subcommands: [
+            PreCommitCommand.self,
+            PrePushCommand.self,
+            InstallCommand.self,
+            CheckLocalizationCommand.self,
+        ],
     )
 }

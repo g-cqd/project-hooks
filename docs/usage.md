@@ -70,6 +70,46 @@ Runs pre-push checks on commits about to be pushed. Automatically invoked by git
 
 > **Note on `work-scope`:** when set, the changed-file set used for steps 5–8 is computed from `merge-base(HEAD, <base>)..HEAD`, with optional `--first-parent` walking and an optional commit-pattern filter. Commit-message validation in step 3 is **not** scoped — every pushed commit is validated regardless. See [configuration.md](configuration.md#pre-pushwork-scope) for details.
 
+### `project-hooks check-localization [paths...]`
+
+Static-analyses Swift sources for SwiftUI string literals missing the
+`comment:` argument that translators rely on. Designed to be run on
+the pre-commit hook against staged files, but also usable standalone.
+
+```bash
+project-hooks check-localization Sources/ App/Views/
+project-hooks check-localization --format json Sources/
+project-hooks check-localization --allow-comment dev-only Sources/
+project-hooks check-localization --include-previews Sources/
+```
+
+**Flagged call sites:** `Text(...)`, `Button(...)`, `Label(...)`,
+`Toggle(...)`, `Picker(...)`, `Section(...)`, `TextField(...)`,
+`.navigationTitle(...)`, `Stepper(...)`, `DatePicker(...)`.
+
+**Skipped automatically:**
+
+- Lines containing `String(localized:`, `LocalizedStringKey(`,
+  `LocalizedStringResource(`, `verbatim:`, or `comment:`.
+- Debug-only APIs: `Logger`, `print`, `assertionFailure`,
+  `preconditionFailure`, `fatalError`.
+- Strings used as identifiers (e.g. `Image(systemName:)`,
+  `URL(string:)`, `Notification.Name(...)`).
+- Files inside `#Preview { … }` macros.
+- Files whose name ends in `Preview.swift` / `Previews.swift` /
+  `+Preview.swift` (override with `--include-previews`).
+- Lines marked with the escape-hatch comment (`// not-localized`
+  by default; configurable via `--allow-comment`).
+
+**Output formats:**
+
+- `text` (default): Xcode-style `path:line:col: warning: …` written to
+  stderr, summary line at the end.
+- `json`: array of `{file, line, column, snippet, api, kind}` objects
+  to stdout.
+
+**Exit codes:** `0` if no issues, `1` if one or more issues are found.
+
 ### `project-hooks --version`
 
 Prints the current version.
