@@ -68,13 +68,6 @@ struct LocalizationAnalyzerTests {
         #expect(issues.isEmpty)
     }
 
-    @Test("String(localized:) wrapper passes")
-    func stringLocalizedPasses() {
-        let source = #"Text(String(localized: "Hello"))"#
-        let issues = analyzer().analyze(file: fakeURL, source: source)
-        #expect(issues.isEmpty)
-    }
-
     @Test("verbatim: parameter passes")
     func verbatimPasses() {
         let source = #"Text(verbatim: "Hello")"#
@@ -146,5 +139,125 @@ struct LocalizationAnalyzerTests {
         let issues = analyzer().analyze(file: fakeURL, source: source)
         #expect(issues.count == 1)
         #expect(issues.first?.snippet == "Visible")
+    }
+
+    // MARK: - Extended API surface (added after the Ful audit pass)
+
+    @Test(".alert without comment is flagged")
+    func alertWithoutComment() {
+        let source = #".alert("Confirm Delete", isPresented: $show) { }"#
+        let issues = analyzer().analyze(file: fakeURL, source: source)
+        #expect(issues.contains { $0.api == "alert" && $0.snippet == "Confirm Delete" })
+    }
+
+    @Test(".confirmationDialog without comment is flagged")
+    func confirmationDialogWithoutComment() {
+        let source = #".confirmationDialog("Are you sure?", isPresented: $show) { }"#
+        let issues = analyzer().analyze(file: fakeURL, source: source)
+        #expect(issues.contains { $0.api == "confirmationDialog" && $0.snippet == "Are you sure?" })
+    }
+
+    @Test("Menu without comment is flagged")
+    func menuWithoutComment() {
+        let source = #"Menu("Options") { Button("X") { } }"#
+        let issues = analyzer().analyze(file: fakeURL, source: source)
+        #expect(issues.contains { $0.api == "Menu" && $0.snippet == "Options" })
+    }
+
+    @Test("NavigationLink without comment is flagged")
+    func navigationLinkWithoutComment() {
+        let source = #"NavigationLink("Open", destination: detail)"#
+        let issues = analyzer().analyze(file: fakeURL, source: source)
+        #expect(issues.contains { $0.api == "NavigationLink" && $0.snippet == "Open" })
+    }
+
+    @Test("Link without comment is flagged")
+    func linkWithoutComment() {
+        let source = #"Link("Privacy Policy", destination: url)"#
+        let issues = analyzer().analyze(file: fakeURL, source: source)
+        #expect(issues.contains { $0.api == "Link" && $0.snippet == "Privacy Policy" })
+    }
+
+    @Test("SecureField without comment is flagged")
+    func secureFieldWithoutComment() {
+        let source = #"SecureField("Password", text: $pwd)"#
+        let issues = analyzer().analyze(file: fakeURL, source: source)
+        #expect(issues.contains { $0.api == "SecureField" && $0.snippet == "Password" })
+    }
+
+    @Test("ColorPicker without comment is flagged")
+    func colorPickerWithoutComment() {
+        let source = #"ColorPicker("Accent", selection: $color)"#
+        let issues = analyzer().analyze(file: fakeURL, source: source)
+        #expect(issues.contains { $0.api == "ColorPicker" && $0.snippet == "Accent" })
+    }
+
+    @Test("GroupBox without comment is flagged")
+    func groupBoxWithoutComment() {
+        let source = #"GroupBox("Summary") { }"#
+        let issues = analyzer().analyze(file: fakeURL, source: source)
+        #expect(issues.contains { $0.api == "GroupBox" && $0.snippet == "Summary" })
+    }
+
+    @Test(".accessibilityLabel literal is flagged")
+    func accessibilityLabelLiteral() {
+        let source = #".accessibilityLabel("Tap to refresh")"#
+        let issues = analyzer().analyze(file: fakeURL, source: source)
+        #expect(issues.contains { $0.api == "accessibilityLabel" && $0.snippet == "Tap to refresh" })
+    }
+
+    @Test(".accessibilityLabel(Text(verbatim:)) passes")
+    func accessibilityLabelVerbatimWrapped() {
+        let source = #".accessibilityLabel(Text(verbatim: "\(value)"))"#
+        let issues = analyzer().analyze(file: fakeURL, source: source)
+        #expect(issues.isEmpty)
+    }
+
+    @Test(".accessibilityHint literal is flagged")
+    func accessibilityHintLiteral() {
+        let source = #".accessibilityHint("Opens settings")"#
+        let issues = analyzer().analyze(file: fakeURL, source: source)
+        #expect(issues.contains { $0.api == "accessibilityHint" && $0.snippet == "Opens settings" })
+    }
+
+    @Test(".navigationSubtitle literal is flagged")
+    func navigationSubtitleLiteral() {
+        let source = #".navigationSubtitle("Last refresh: now")"#
+        let issues = analyzer().analyze(file: fakeURL, source: source)
+        #expect(issues.contains { $0.api == "navigationSubtitle" && $0.snippet == "Last refresh: now" })
+    }
+
+    // MARK: - String(localized:) detection
+
+    @Test("String(localized:) without comment is flagged")
+    func stringLocalizedNoComment() {
+        let source = #"let title = String(localized: "Hello")"#
+        let issues = analyzer().analyze(file: fakeURL, source: source)
+        #expect(issues.contains { $0.api == "String(localized:)" && $0.snippet == "Hello" })
+    }
+
+    @Test("String(localized:) WITH comment passes")
+    func stringLocalizedWithComment() {
+        let source = #"let title = String(localized: "Hello", comment: "Greeting")"#
+        let issues = analyzer().analyze(file: fakeURL, source: source)
+        #expect(issues.isEmpty)
+    }
+
+    @Test("Text(String(localized:)) is detected via the String(localized:) pattern, not Text")
+    func nestedStringLocalizedInsideText() {
+        // Text() opens with `String(`, not `"`, so the Text regex
+        // doesn't fire; the inner `String(localized:)` regex catches
+        // the missing comment. Single match expected.
+        let source = #"Text(String(localized: "Hello"))"#
+        let issues = analyzer().analyze(file: fakeURL, source: source)
+        #expect(issues.count == 1)
+        #expect(issues.first?.api == "String(localized:)")
+    }
+
+    @Test("NSPredicate format string is not flagged")
+    func nsPredicateSkipped() {
+        let source = #"NSPredicate(format: "name == %@", value)"#
+        let issues = analyzer().analyze(file: fakeURL, source: source)
+        #expect(issues.isEmpty)
     }
 }
