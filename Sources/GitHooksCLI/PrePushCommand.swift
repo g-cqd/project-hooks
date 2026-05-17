@@ -267,10 +267,10 @@ private func runTestOverride(_ override: HooksConfig.TestOverride, changedFiles:
     let outcome = diagnoseTestResult(result, moduleName: override.type.rawValue, timeout: testTimeout)
 
     switch outcome {
-    case .passed, .noOp:
-        return
-    case .timedOut, .failed:
-        throw ExitCode(1)
+        case .passed, .noOp:
+            return
+        case .timedOut, .failed:
+            throw ExitCode(1)
     }
 }
 
@@ -285,23 +285,25 @@ private func buildOverrideCommand(
     changedFiles: [String],
     repoRoot: String,
 ) throws -> [String]? {
-    let destination = ProcessInfo.processInfo.environment["GITHOOKS_DESTINATION"]
+    let destination =
+        ProcessInfo.processInfo.environment["GITHOOKS_DESTINATION"]
         ?? override.destination
         ?? defaultIOSDestination
 
     switch override.type {
-    case .xcodebuild:
-        return try buildXcodebuildOverride(
-            override, changedFiles: changedFiles, repoRoot: repoRoot, destination: destination,
-        )
-    case .swift:
-        return ["swift", "test", "--package-path", repoRoot]
-    case .gradle:
-        // Use gradlew from repo root directly — settings-only roots don't have build.gradle
-        let gradlew = URL(fileURLWithPath: repoRoot).appendingPathComponent("gradlew").path
-        let wrapper = FileManager.default.isExecutableFile(atPath: gradlew) ? gradlew : "gradle"
-        let task = override.task?.trimmingCharacters(in: .whitespaces)
-        return [wrapper, (task?.isEmpty == false ? task! : "test")]
+        case .xcodebuild:
+            return try buildXcodebuildOverride(
+                override, changedFiles: changedFiles, repoRoot: repoRoot, destination: destination,
+            )
+        case .swift:
+            return ["swift", "test", "--package-path", repoRoot]
+        case .gradle:
+            // Use gradlew from repo root directly — settings-only roots don't have build.gradle
+            let gradlew = URL(fileURLWithPath: repoRoot).appendingPathComponent("gradlew").path
+            let wrapper = FileManager.default.isExecutableFile(atPath: gradlew) ? gradlew : "gradle"
+            let trimmed = override.task?.trimmingCharacters(in: .whitespaces)
+            let task = (trimmed?.isEmpty == false) ? (trimmed ?? "test") : "test"
+            return [wrapper, task]
     }
 }
 
@@ -319,14 +321,13 @@ private func buildXcodebuildOverride(
     guard let testPlan = override.testPlan else { return command }
 
     let resolution = HookLogic.resolveAvailableBundles(repoRoot: repoRoot, testPlanRelativePath: testPlan)
-    if resolution.loadedFromXCTestPlan {
-        printInfo("Loaded bundles from: \(resolution.xctestplanPath)")
-    } else {
+    guard resolution.loadedFromXCTestPlan else {
         throw HookError.message(
             "Could not load test plan: \(resolution.xctestplanPath). "
                 + "Fix the test-plan path in .project-hooks.yml.",
         )
     }
+    printInfo("Loaded bundles from: \(resolution.xctestplanPath)")
 
     let broadPaths = override.broadImpactPaths ?? []
     let isBroadImpact = changedFiles.contains { file in
@@ -369,10 +370,10 @@ private func runModuleTests(modules: [DetectedModule], repoRoot: String) throws 
         let outcome = diagnoseTestResult(result, moduleName: module.name, timeout: testTimeout)
 
         switch outcome {
-        case .passed, .noOp:
-            continue
-        case .timedOut, .failed:
-            throw ExitCode(1)
+            case .passed, .noOp:
+                continue
+            case .timedOut, .failed:
+                throw ExitCode(1)
         }
     }
 }
@@ -419,11 +420,12 @@ private func collectCommitSHAs(
     var shas: [String] = []
     for update in updates {
         if update.isTagUpdate || update.isDeletion { continue }
-        var args: [String] = if update.isNewRemoteRef {
-            ["rev-list", update.localSHA, "--not", "--remotes=\(remoteName)"]
-        } else {
-            ["rev-list", "\(update.remoteSHA)..\(update.localSHA)"]
-        }
+        var args: [String] =
+            if update.isNewRemoteRef {
+                ["rev-list", update.localSHA, "--not", "--remotes=\(remoteName)"]
+            } else {
+                ["rev-list", "\(update.remoteSHA)..\(update.localSHA)"]
+            }
         if let excludeBase {
             // For the new-ref form, `--not` is already in effect, so a positional ref is
             // added to the exclusion set. For the range form, prefix with `^` to exclude.
@@ -434,7 +436,9 @@ private func collectCommitSHAs(
     return shas
 }
 
-/// Resolve the `commit-message.base` ref to a SHA. Returns nil when the field is unset
+/// Resolve the `commit-message.base` ref to a SHA.
+///
+/// Returns nil when the field is unset
 /// or the ref cannot be resolved (a warning is printed in the latter case so the user
 /// notices the misconfiguration without blocking the push).
 private func resolveCommitMessageExcludeBase(
@@ -480,17 +484,20 @@ private func collectChangedFiles(
         }
 
         // Fallback: original behavior.
-        try files.formUnion(collectFallbackChangedFiles(
-            update: update,
-            remoteName: remoteName,
-            repoRoot: repoRoot,
-        ))
+        try files.formUnion(
+            collectFallbackChangedFiles(
+                update: update,
+                remoteName: remoteName,
+                repoRoot: repoRoot,
+            ))
     }
 
     return files.sorted()
 }
 
-/// Collect changed files using a configured work-scope baseline. Returns nil if scope
+/// Collect changed files using a configured work-scope baseline.
+///
+/// Returns nil if scope
 /// can't be applied to this update (caller must fall back to default behavior).
 private func collectScopedChangedFiles(
     update: GitPushUpdate,
@@ -505,20 +512,24 @@ private func collectScopedChangedFiles(
         return nil
     }
 
-    guard let baseSHA = try gitFirstLine(
-        ["rev-parse", "--verify", "--quiet", workScope.base],
-        repoRoot: repoRoot,
-        allowFailure: true,
-    ) else {
+    guard
+        let baseSHA = try gitFirstLine(
+            ["rev-parse", "--verify", "--quiet", workScope.base],
+            repoRoot: repoRoot,
+            allowFailure: true,
+        )
+    else {
         printWarn("work-scope: base '\(workScope.base)' not found — falling back to default range.")
         return nil
     }
 
-    guard let mergeBase = try gitFirstLine(
-        ["merge-base", update.localSHA, baseSHA],
-        repoRoot: repoRoot,
-        allowFailure: true,
-    ) else {
+    guard
+        let mergeBase = try gitFirstLine(
+            ["merge-base", update.localSHA, baseSHA],
+            repoRoot: repoRoot,
+            allowFailure: true,
+        )
+    else {
         printWarn("work-scope: no merge-base between HEAD and '\(workScope.base)' — falling back.")
         return nil
     }
@@ -537,16 +548,18 @@ private func collectScopedChangedFiles(
     // regardless of walk strategy: any commits brought in by an in-branch merge of `base`
     // are already part of the baseline tree, so they don't appear in the diff.
     guard let commitFilter = workScope.commitFilter else {
-        return try Set(gitNullSeparated(
-            ["diff", "--name-only", "--diff-filter=ACMR", "-z", mergeBase, update.localSHA, "--"],
-            repoRoot: repoRoot,
-        ))
+        return try Set(
+            gitNullSeparated(
+                ["diff", "--name-only", "--diff-filter=ACMR", "-z", mergeBase, update.localSHA, "--"],
+                repoRoot: repoRoot,
+            ))
     }
 
     // With a commit-filter we have to enumerate the commits, filter them, then union
     // their file diffs — we can't use a single tree-vs-tree diff because filtered commits
     // might still touch shared files.
-    let revListArgs = workScope.walk == .firstParent
+    let revListArgs =
+        workScope.walk == .firstParent
         ? ["rev-list", "--first-parent", "\(mergeBase)..\(update.localSHA)"]
         : ["rev-list", "\(mergeBase)..\(update.localSHA)"]
     let shas = try gitLines(revListArgs, repoRoot: repoRoot)
@@ -574,22 +587,22 @@ private func collectScopedChangedFiles(
         let descriptor = result.branchIdentifier.map { "outside '\($0)'" } ?? "outside scope"
         let summary = "work-scope.commit-filter: dropped \(result.dropped.count) commit(s) \(descriptor)."
         switch action {
-        case .skip:
-            printInfo(summary)
-        case .warn:
-            printWarn(summary)
-            for c in result.dropped {
-                let title = c.message.split(whereSeparator: \.isNewline).first.map(String.init) ?? c.message
-                print("  - \(String(c.sha.prefix(10))) \(title)")
-            }
-        case .fail:
-            printError(summary)
-            for c in result.dropped {
-                let title = c.message.split(whereSeparator: \.isNewline).first.map(String.init) ?? c.message
-                print("  - \(String(c.sha.prefix(10))) \(title)")
-            }
-            printWarn("Push blocked. Drop or re-author these commits and push again.")
-            throw ExitCode(1)
+            case .skip:
+                printInfo(summary)
+            case .warn:
+                printWarn(summary)
+                for c in result.dropped {
+                    let title = c.message.split(whereSeparator: \.isNewline).first.map(String.init) ?? c.message
+                    print("  - \(String(c.sha.prefix(10))) \(title)")
+                }
+            case .fail:
+                printError(summary)
+                for c in result.dropped {
+                    let title = c.message.split(whereSeparator: \.isNewline).first.map(String.init) ?? c.message
+                    print("  - \(String(c.sha.prefix(10))) \(title)")
+                }
+                printWarn("Push blocked. Drop or re-author these commits and push again.")
+                throw ExitCode(1)
         }
     }
 
@@ -602,7 +615,8 @@ private func collectScopedChangedFiles(
     for commit in kept {
         // For merges, diff-tree's default per-parent output would inflate files; -m -1 picks
         // first-parent diff which matches our walk semantics.
-        let args = commit.isMerge
+        let args =
+            commit.isMerge
             ? ["diff-tree", "--no-commit-id", "--name-only", "--diff-filter=ACMR", "-r", "-z", "-m", "-1", commit.sha]
             : ["diff-tree", "--no-commit-id", "--name-only", "--diff-filter=ACMR", "-r", "-z", commit.sha]
         try files.formUnion(gitNullSeparated(args, repoRoot: repoRoot))
@@ -627,11 +641,13 @@ private func collectFallbackChangedFiles(
                 ["merge-base", update.localSHA, defaultRemote],
                 repoRoot: repoRoot,
                 allowFailure: true,
-            ) {
-            try files.formUnion(gitNullSeparated(
-                ["diff", "--name-only", "--diff-filter=ACMR", "-z", mergeBase, update.localSHA, "--"],
-                repoRoot: repoRoot,
-            ))
+            )
+        {
+            try files.formUnion(
+                gitNullSeparated(
+                    ["diff", "--name-only", "--diff-filter=ACMR", "-z", mergeBase, update.localSHA, "--"],
+                    repoRoot: repoRoot,
+                ))
             return files
         }
 
@@ -639,30 +655,34 @@ private func collectFallbackChangedFiles(
             ["rev-list", update.localSHA, "--not", "--remotes=\(remoteName)"],
             repoRoot: repoRoot,
         ) {
-            try files.formUnion(gitNullSeparated(
-                ["diff-tree", "--no-commit-id", "--name-only", "--diff-filter=ACMR", "-r", "-z", rev],
-                repoRoot: repoRoot,
-            ))
+            try files.formUnion(
+                gitNullSeparated(
+                    ["diff-tree", "--no-commit-id", "--name-only", "--diff-filter=ACMR", "-r", "-z", rev],
+                    repoRoot: repoRoot,
+                ))
         }
         return files
     }
 
-    try files.formUnion(gitNullSeparated(
-        ["diff", "--name-only", "--diff-filter=ACMR", "-z", update.remoteSHA, update.localSHA, "--"],
-        repoRoot: repoRoot,
-    ))
+    try files.formUnion(
+        gitNullSeparated(
+            ["diff", "--name-only", "--diff-filter=ACMR", "-z", update.remoteSHA, update.localSHA, "--"],
+            repoRoot: repoRoot,
+        ))
     return files
 }
 
 /// Match the local push ref against the configured baseline.
+///
 /// Both "origin/develop" and "develop" base values match a push of `refs/heads/develop`.
 private func isPushingBase(update: GitPushUpdate, base: String) -> Bool {
     let localBranch = BranchNameValidator.shortBranchName(fromRef: update.localRef)
-    let baseBranch: String = if let slash = base.firstIndex(of: "/") {
-        String(base[base.index(after: slash)...])
-    } else {
-        base
-    }
+    let baseBranch: String =
+        if let slash = base.firstIndex(of: "/") {
+            String(base[base.index(after: slash)...])
+        } else {
+            base
+        }
     return localBranch == baseBranch
 }
 
@@ -692,7 +712,9 @@ private func runPRSizeCheck(
     try reportPRSize(stats: stats, config: prSize, blockMessage: "Push")
 }
 
-/// Render the PR-size score and decide whether to block. Shared by the pre-commit
+/// Render the PR-size score and decide whether to block.
+///
+/// Shared by the pre-commit
 /// and pre-push hooks so both surface identical formatting and thresholds.
 func reportPRSize(
     stats: [PRSizeMetric.FileStat],
@@ -730,11 +752,11 @@ func reportPRSize(
     }
 
     switch config.mode {
-    case .warn:
-        printWarn("PR size exceeds thresholds. Continuing because mode=warn.")
-    case .fail:
-        printWarn("\(blockMessage) blocked. Split the change into smaller PRs and try again.")
-        throw ExitCode(1)
+        case .warn:
+            printWarn("PR size exceeds thresholds. Continuing because mode=warn.")
+        case .fail:
+            printWarn("\(blockMessage) blocked. Split the change into smaller PRs and try again.")
+            throw ExitCode(1)
     }
 }
 
@@ -752,19 +774,20 @@ private func collectFileStats(
             throw HookError.message(error)
         }
 
-        let stats: [PRSizeMetric.FileStat] = if let scoped = try collectScopedFileStats(
-            update: update,
-            workScope: config?.prePush.workScope,
-            repoRoot: repoRoot,
-        ) {
-            scoped
-        } else {
-            try collectFallbackFileStats(
+        let stats: [PRSizeMetric.FileStat] =
+            if let scoped = try collectScopedFileStats(
                 update: update,
-                remoteName: remoteName,
+                workScope: config?.prePush.workScope,
                 repoRoot: repoRoot,
-            )
-        }
+            ) {
+                scoped
+            } else {
+                try collectFallbackFileStats(
+                    update: update,
+                    remoteName: remoteName,
+                    repoRoot: repoRoot,
+                )
+            }
 
         for stat in stats {
             if let existing = byPath[stat.path] {
@@ -791,17 +814,21 @@ private func collectScopedFileStats(
     guard let workScope else { return nil }
     if isPushingBase(update: update, base: workScope.base) { return nil }
 
-    guard let baseSHA = try gitFirstLine(
-        ["rev-parse", "--verify", "--quiet", workScope.base],
-        repoRoot: repoRoot,
-        allowFailure: true,
-    ) else { return nil }
+    guard
+        let baseSHA = try gitFirstLine(
+            ["rev-parse", "--verify", "--quiet", workScope.base],
+            repoRoot: repoRoot,
+            allowFailure: true,
+        )
+    else { return nil }
 
-    guard let mergeBase = try gitFirstLine(
-        ["merge-base", update.localSHA, baseSHA],
-        repoRoot: repoRoot,
-        allowFailure: true,
-    ) else { return nil }
+    guard
+        let mergeBase = try gitFirstLine(
+            ["merge-base", update.localSHA, baseSHA],
+            repoRoot: repoRoot,
+            allowFailure: true,
+        )
+    else { return nil }
 
     if mergeBase == update.localSHA { return [] }
 
@@ -826,7 +853,8 @@ private func collectFallbackFileStats(
                 ["merge-base", update.localSHA, defaultRemote],
                 repoRoot: repoRoot,
                 allowFailure: true,
-            ) {
+            )
+        {
             return try numstatBetween(mergeBase, update.localSHA, repoRoot: repoRoot)
         }
         // Genuinely new branch with no remote default — skip rather than enumerate

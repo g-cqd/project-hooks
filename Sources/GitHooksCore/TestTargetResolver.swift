@@ -24,6 +24,7 @@ public enum TestTargetResolver {
     static let gradleModuleMarkers = ["build.gradle", "build.gradle.kts"]
 
     /// Find the closest project/module boundary for a file by walking up the directory tree.
+    ///
     /// Returns the relative path from repoRoot to the module root, or nil.
     public static func findClosestModule(
         forFile relativePath: String,
@@ -34,12 +35,13 @@ public enum TestTargetResolver {
         let rootURL = URL(fileURLWithPath: repoRoot).standardized
         var current = rootURL.appendingPathComponent(relativePath).deletingLastPathComponent().standardized
 
-        let markers: [String] = switch platform {
-        case .ios: swiftPackageMarkers
-        case .android: gradleModuleMarkers
-        case .mixed: swiftPackageMarkers + gradleModuleMarkers
-        case .unknown: []
-        }
+        let markers: [String] =
+            switch platform {
+                case .ios: swiftPackageMarkers
+                case .android: gradleModuleMarkers
+                case .mixed: swiftPackageMarkers + gradleModuleMarkers
+                case .unknown: []
+            }
 
         while current.path.hasPrefix(rootURL.path) {
             for marker in markers where fileManager.fileExists(atPath: current.appendingPathComponent(marker).path) {
@@ -49,7 +51,8 @@ public enum TestTargetResolver {
             // Check for .xcodeproj directories (iOS)
             if platform == .ios || platform == .mixed {
                 if let contents = try? fileManager.contentsOfDirectory(atPath: current.path),
-                   contents.contains(where: { $0.hasSuffix(".xcodeproj") }) {
+                    contents.contains(where: { $0.hasSuffix(".xcodeproj") })
+                {
                     return makeRelativePath(from: rootURL, to: current)
                 }
             }
@@ -63,6 +66,7 @@ public enum TestTargetResolver {
     }
 
     /// Detect all unique modules touched by the given changed files.
+    ///
     /// Each module includes both test and build commands pre-computed.
     public static func detectModules(
         changedFiles: [String],
@@ -78,18 +82,20 @@ public enum TestTargetResolver {
             }
             guard seen.insert(modulePath).inserted else { continue }
 
-            let absoluteModulePath = modulePath == "."
+            let absoluteModulePath =
+                modulePath == "."
                 ? repoRoot
                 : URL(fileURLWithPath: repoRoot).appendingPathComponent(modulePath).path
 
             let name = modulePath == "." ? URL(fileURLWithPath: repoRoot).lastPathComponent : modulePath
 
-            modules.append(DetectedModule(
-                name: name,
-                path: modulePath,
-                testCommand: buildTestCommand(modulePath: absoluteModulePath, repoRoot: repoRoot),
-                buildCommand: buildBuildCommand(modulePath: absoluteModulePath, repoRoot: repoRoot),
-            ))
+            modules.append(
+                DetectedModule(
+                    name: name,
+                    path: modulePath,
+                    testCommand: buildTestCommand(modulePath: absoluteModulePath, repoRoot: repoRoot),
+                    buildCommand: buildBuildCommand(modulePath: absoluteModulePath, repoRoot: repoRoot),
+                ))
         }
 
         return modules
@@ -131,7 +137,8 @@ public enum TestTargetResolver {
 
         // Xcode project
         if let contents = try? fileManager.contentsOfDirectory(atPath: modulePath),
-           let xcodeproj = contents.first(where: { $0.hasSuffix(".xcodeproj") }) {
+            let xcodeproj = contents.first(where: { $0.hasSuffix(".xcodeproj") })
+        {
             let projectName = (xcodeproj as NSString).deletingPathExtension
             return [
                 "xcodebuild", action.xcodeVerb,
@@ -146,7 +153,7 @@ public enum TestTargetResolver {
 
         // Gradle module
         for gradleFile in ["build.gradle.kts", "build.gradle"]
-            where fileManager.fileExists(atPath: moduleURL.appendingPathComponent(gradleFile).path) {
+        where fileManager.fileExists(atPath: moduleURL.appendingPathComponent(gradleFile).path) {
             let gradlew = findGradleWrapper(from: modulePath, repoRoot: repoRoot)
             return [
                 gradlew, "-p", modulePath, action.gradleTask,
@@ -159,6 +166,7 @@ public enum TestTargetResolver {
     }
 
     /// Generate a unique, isolated build directory for a module.
+    ///
     /// Prevents conflicts with Xcode's shared DerivedData, SPM's .build, or Gradle's build/.
     private static func isolatedBuildDir(for modulePath: String) -> String {
         let pid = ProcessInfo.processInfo.processIdentifier

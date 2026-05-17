@@ -1,6 +1,7 @@
 import Foundation
-@testable import GitHooksCore
 import Testing
+
+@testable import GitHooksCore
 
 struct ConfigResolutionTests {
     // MARK: - Flat user config loading
@@ -8,11 +9,11 @@ struct ConfigResolutionTests {
     @Test
     func `flat user config applies to any repo`() throws {
         let yaml = """
-        pre-commit:
-          tasks:
-            - name: lint
-              run: swiftlint
-        """
+            pre-commit:
+              tasks:
+                - name: lint
+                  run: swiftlint
+            """
 
         let config = try HooksConfig.parse(yaml: yaml)
 
@@ -24,11 +25,11 @@ struct ConfigResolutionTests {
     @Test
     func `flat user config with pre-push section`() throws {
         let yaml = """
-        pre-push:
-          commit-message:
-            pattern: "^PROJ-\\\\d+"
-            error: "Need ticket"
-        """
+            pre-push:
+              commit-message:
+                pattern: "^PROJ-\\\\d+"
+                error: "Need ticket"
+            """
 
         let config = try HooksConfig.parse(yaml: yaml)
 
@@ -47,13 +48,13 @@ struct ConfigResolutionTests {
         defer { try? FileManager.default.removeItem(at: dir) }
 
         let yaml = """
-        projects:
-          ~/Developer/work/my-app:
-            pre-commit:
-              tasks:
-                - name: strict-lint
-                  run: swiftlint --strict
-        """
+            projects:
+              ~/Developer/work/my-app:
+                pre-commit:
+                  tasks:
+                    - name: strict-lint
+                      run: swiftlint --strict
+            """
 
         let configPath = dir.appendingPathComponent("config.yml")
         try yaml.write(to: configPath, atomically: true, encoding: .utf8)
@@ -92,11 +93,11 @@ struct ConfigResolutionTests {
         defer { try? FileManager.default.removeItem(at: dir) }
 
         let localYaml = """
-        pre-commit:
-          tasks:
-            - name: local-task
-              run: echo local
-        """
+            pre-commit:
+              tasks:
+                - name: local-task
+                  run: echo local
+            """
 
         try localYaml.write(
             to: dir.appendingPathComponent(".project-hooks.yml"),
@@ -263,10 +264,10 @@ struct ConfigResolutionTests {
         defer { try? FileManager.default.removeItem(at: dir) }
 
         let yaml = """
-        pre-push:
-          reject-trailers:
-            - "Co-authored-by"
-        """
+            pre-push:
+              reject-trailers:
+                - "Co-authored-by"
+            """
 
         try yaml.write(
             to: dir.appendingPathComponent(".project-hooks.yml"),
@@ -284,11 +285,11 @@ struct ConfigResolutionTests {
         defer { try? FileManager.default.removeItem(at: dir) }
 
         let yaml = """
-        pre-commit:
-          tasks:
-            - name: check
-              run: echo ok
-        """
+            pre-commit:
+              tasks:
+                - name: check
+                  run: echo ok
+            """
 
         try yaml.write(
             to: dir.appendingPathComponent(".project-hooks.yml"),
@@ -306,11 +307,11 @@ struct ConfigResolutionTests {
     @Test
     func `flat format parses normally via parse method`() throws {
         let yaml = """
-        pre-commit:
-          tasks:
-            - name: lint
-              run: swiftlint
-        """
+            pre-commit:
+              tasks:
+                - name: lint
+                  run: swiftlint
+            """
 
         let config = try HooksConfig.parse(yaml: yaml)
         #expect(config.preCommit.tasks.count == 1)
@@ -322,13 +323,13 @@ struct ConfigResolutionTests {
         // If you accidentally parse a projects-list config as flat,
         // the "projects" key won't match any hook section — tasks will be empty.
         let yaml = """
-        projects:
-          ~/Developer/work/*:
-            pre-commit:
-              tasks:
-                - name: lint
-                  run: swiftlint
-        """
+            projects:
+              ~/Developer/work/*:
+                pre-commit:
+                  tasks:
+                    - name: lint
+                      run: swiftlint
+            """
 
         let config = try HooksConfig.parse(yaml: yaml)
         #expect(config.preCommit.tasks.isEmpty, "projects key should not be parsed as hook config")

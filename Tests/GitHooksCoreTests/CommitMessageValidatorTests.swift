@@ -45,7 +45,7 @@ struct CommitMessageValidatorTests {
     @Test
     func `reject trailer detects co authored by`() {
         let commits = [
-            (sha: "abc123", message: "PROJ-1234 Feature\n\nCo-authored-by: Bob <bob@test.com>"),
+            (sha: "abc123", message: "PROJ-1234 Feature\n\nCo-authored-by: Bob <bob@test.com>")
         ]
         let failures = CommitMessageValidator.validate(
             commits: commits,
@@ -60,7 +60,7 @@ struct CommitMessageValidatorTests {
     @Test
     func `reject multiple trailers`() {
         let commits = [
-            (sha: "abc123", message: "Fix\n\nSigned-off-by: A\nCo-authored-by: B"),
+            (sha: "abc123", message: "Fix\n\nSigned-off-by: A\nCo-authored-by: B")
         ]
         let failures = CommitMessageValidator.validate(
             commits: commits,
@@ -74,7 +74,7 @@ struct CommitMessageValidatorTests {
     @Test
     func `both pattern and trailer can fail`() {
         let commits = [
-            (sha: "abc123", message: "bad\n\nCo-authored-by: B"),
+            (sha: "abc123", message: "bad\n\nCo-authored-by: B")
         ]
         let failures = CommitMessageValidator.validate(
             commits: commits,
@@ -90,7 +90,7 @@ struct CommitMessageValidatorTests {
         let commits = [(sha: "abc123", message: "anything")]
         let failures = CommitMessageValidator.validate(
             commits: commits,
-            pattern: "[invalid(regex", // broken regex — unbalanced bracket
+            pattern: "[invalid(regex",  // broken regex — unbalanced bracket
             patternError: nil,
             rejectTrailers: [],
         )

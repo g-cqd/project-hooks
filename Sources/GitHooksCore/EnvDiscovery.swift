@@ -9,6 +9,7 @@ import Foundation
 /// `JAVA_HOME` and `ANDROID_HOME` when missing.
 public enum EnvDiscovery {
     /// Default Homebrew + Android Studio paths to probe for a JDK installation.
+    ///
     /// Order matters: unversioned formulas first, then descending major versions, then
     /// Android Studio's bundled runtimes as a last resort.
     public static let defaultJavaHomeCandidates: [String] = [
@@ -26,7 +27,9 @@ public enum EnvDiscovery {
         "/Applications/Android Studio.app/Contents/jre/Contents/Home",
     ]
 
-    /// Default Android SDK locations. The macOS Android Studio default installs to
+    /// Default Android SDK locations.
+    ///
+    /// The macOS Android Studio default installs to
     /// `~/Library/Android/sdk`. Linux and command-line installations vary.
     public static let defaultAndroidSdkCandidates: [String] = [
         "$HOME/Library/Android/sdk",
@@ -55,8 +58,9 @@ public enum EnvDiscovery {
         }
 
         if let systemPath = runJavaHome(),
-           !systemPath.isEmpty,
-           isExecutable("\(systemPath)/bin/java") {
+            !systemPath.isEmpty,
+            isExecutable("\(systemPath)/bin/java")
+        {
             return systemPath
         }
 
@@ -118,6 +122,7 @@ public enum EnvDiscovery {
     }
 
     /// Invoke `/usr/libexec/java_home` and return its trimmed stdout when it succeeds.
+    ///
     /// Silently returns nil on macOS systems with no system-registered JDK.
     public static func runSystemJavaHome() -> String? {
         let process = Process()
@@ -138,7 +143,8 @@ public enum EnvDiscovery {
         guard process.terminationStatus == 0 else { return nil }
 
         let data = stdout.fileHandleForReading.readDataToEndOfFile()
-        let path = String(data: data, encoding: .utf8)?
+        let path =
+            String(data: data, encoding: .utf8)?
             .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         return path.isEmpty ? nil : path
     }

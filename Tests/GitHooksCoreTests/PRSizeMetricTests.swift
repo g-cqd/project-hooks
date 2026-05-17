@@ -8,10 +8,10 @@ struct PRSizeMetricTests {
     @Test
     func `parse numstat plain text format`() {
         let raw = """
-        10\t2\tSources/Foo.swift
-        5\t0\tSources/Bar.swift
-        -\t-\tdocs/diagram.png
-        """
+            10\t2\tSources/Foo.swift
+            5\t0\tSources/Bar.swift
+            -\t-\tdocs/diagram.png
+            """
 
         let stats = PRSizeMetric.parseNumstat(raw)
 
@@ -42,11 +42,11 @@ struct PRSizeMetricTests {
     @Test
     func `parse numstat skips malformed lines`() {
         let raw = """
-        10\t2\tSources/Foo.swift
-        garbage line
-        \t\t
-        5\t0\tSources/Bar.swift
-        """
+            10\t2\tSources/Foo.swift
+            garbage line
+            \t\t
+            5\t0\tSources/Bar.swift
+            """
 
         let stats = PRSizeMetric.parseNumstat(raw)
 
@@ -77,12 +77,13 @@ struct PRSizeMetricTests {
     @Test
     func `large additions triggers additions violation`() {
         var stats: [PRSizeMetric.FileStat] = []
-        for index in 0 ..< 5 {
-            stats.append(PRSizeMetric.FileStat(
-                path: "Sources/File\(index).swift",
-                added: 300,
-                deleted: 0,
-            ))
+        for index in 0..<5 {
+            stats.append(
+                PRSizeMetric.FileStat(
+                    path: "Sources/File\(index).swift",
+                    added: 300,
+                    deleted: 0,
+                ))
         }
         let config = HooksConfig.PRSizeConfig(maxAdditions: 800)
 
@@ -100,12 +101,13 @@ struct PRSizeMetricTests {
         // 30 files, each touching 40 lines → maximum entropy + high volume.
         // Volume = ln(1201) ≈ 7.09; scatter = 1.0 * ln(31) ≈ 3.43; total ≈ 10.52 → large.
         var stats: [PRSizeMetric.FileStat] = []
-        for index in 0 ..< 30 {
-            stats.append(PRSizeMetric.FileStat(
-                path: "Sources/Module\(index)/File.swift",
-                added: 40,
-                deleted: 0,
-            ))
+        for index in 0..<30 {
+            stats.append(
+                PRSizeMetric.FileStat(
+                    path: "Sources/Module\(index)/File.swift",
+                    added: 40,
+                    deleted: 0,
+                ))
         }
 
         let result = PRSizeMetric.compute(
@@ -124,7 +126,7 @@ struct PRSizeMetricTests {
     @Test
     func `concentrated single-file changes have near-zero scatter`() {
         let stats = [
-            PRSizeMetric.FileStat(path: "Sources/Big.swift", added: 500, deleted: 100),
+            PRSizeMetric.FileStat(path: "Sources/Big.swift", added: 500, deleted: 100)
         ]
 
         let result = PRSizeMetric.compute(
@@ -193,13 +195,13 @@ struct PRSizeMetricTests {
 
         #expect(result.score.testFiles == 1)
         #expect(result.score.testAdditions == 200)
-        #expect(result.score.additions == 200) // Foo + FooTests now both prod
+        #expect(result.score.additions == 200)  // Foo + FooTests now both prod
     }
 
     @Test
     func `empty test patterns disables test classification`() {
         let stats: [PRSizeMetric.FileStat] = [
-            .init(path: "Tests/FooTests.swift", added: 500, deleted: 0),
+            .init(path: "Tests/FooTests.swift", added: 500, deleted: 0)
         ]
         let config = HooksConfig.PRSizeConfig(testPatterns: [])
 
@@ -213,7 +215,7 @@ struct PRSizeMetricTests {
     func `cognitive score threshold triggers violation`() {
         // Lots of files, lots of lines → high cognitive score
         var stats: [PRSizeMetric.FileStat] = []
-        for index in 0 ..< 25 {
+        for index in 0..<25 {
             stats.append(.init(path: "Sources/F\(index).swift", added: 50, deleted: 10))
         }
         let config = HooksConfig.PRSizeConfig(
@@ -233,7 +235,7 @@ struct PRSizeMetricTests {
     @Test
     func `zero thresholds disable individual checks`() {
         let stats: [PRSizeMetric.FileStat] = [
-            .init(path: "Sources/Foo.swift", added: 100_000, deleted: 0),
+            .init(path: "Sources/Foo.swift", added: 100_000, deleted: 0)
         ]
         let config = HooksConfig.PRSizeConfig(
             maxAdditions: 0,
@@ -251,7 +253,7 @@ struct PRSizeMetricTests {
     @Test
     func `weight zero on volume eliminates volume contribution`() {
         let stats: [PRSizeMetric.FileStat] = [
-            .init(path: "Sources/Foo.swift", added: 1000, deleted: 0),
+            .init(path: "Sources/Foo.swift", added: 1000, deleted: 0)
         ]
         let config = HooksConfig.PRSizeConfig(volumeWeight: 0.0, scatterWeight: 0.0)
 

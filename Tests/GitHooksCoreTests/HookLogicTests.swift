@@ -10,12 +10,14 @@ struct HookLogicTests {
 
         #expect(updates.count == 2)
         let first = try #require(updates.first)
-        #expect(first == GitPushUpdate(
-            localRef: "refs/heads/feature",
-            localSHA: "abc",
-            remoteRef: "refs/heads/feature",
-            remoteSHA: "def",
-        ))
+        #expect(
+            first
+                == GitPushUpdate(
+                    localRef: "refs/heads/feature",
+                    localSHA: "abc",
+                    remoteRef: "refs/heads/feature",
+                    remoteSHA: "def",
+                ))
     }
 
     @Test
@@ -141,14 +143,14 @@ struct HookLogicTests {
     @Test
     func `parse bundles from xctestplan data`() {
         let json = """
-        {
-          "testTargets": [
-            { "target": { "identifier": "UUID123", "name": "UnitTests" } },
-            { "target": { "identifier": "UITests", "name": "UITests" } },
-            { "target": { "name": "UITests" } }
-          ]
-        }
-        """
+            {
+              "testTargets": [
+                { "target": { "identifier": "UUID123", "name": "UnitTests" } },
+                { "target": { "identifier": "UITests", "name": "UITests" } },
+                { "target": { "name": "UITests" } }
+              ]
+            }
+            """
 
         let bundles = HookLogic.parseBundles(fromXCTestPlanData: Data(json.utf8))
         #expect(bundles == ["UnitTests", "UITests"])

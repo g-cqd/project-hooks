@@ -98,7 +98,8 @@ private func childProcessIDs(of parentID: pid_t) -> [pid_t] {
     guard process.terminationStatus == 0 else { return [] }
 
     let output = String(data: stdout.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-    return output
+    return
+        output
         .split(whereSeparator: \.isNewline)
         .compactMap { pid_t(String($0)) }
 }
@@ -129,7 +130,9 @@ private func signalProcessIDs(_ processIDs: [pid_t], signal: Int32) {
     }
 }
 
-/// Wait for a process to finish, enforcing a deadline. Returns true if the process timed out.
+/// Wait for a process to finish, enforcing a deadline.
+///
+/// Returns true if the process timed out.
 /// Attempts graceful termination before force-killing.
 private func waitForProcess(_ process: Process, deadline: Date) -> Bool {
     while process.isRunning, Date() < deadline {
@@ -158,7 +161,9 @@ private func waitForProcess(_ process: Process, deadline: Date) -> Bool {
     return true
 }
 
-/// Run a command and capture output. On timeout, the process is killed and partial output is returned
+/// Run a command and capture output.
+///
+/// On timeout, the process is killed and partial output is returned
 /// in the `CommandResult` with `timedOut = true` (instead of throwing).
 @discardableResult
 func runCommand(
@@ -382,12 +387,13 @@ private func restageFiles(
     matchedFiles: [String],
     repoRoot: String,
 ) throws {
-    let filesToStage: [[String]] = switch config {
-    case .matchedFiles:
-        matchedFiles.isEmpty ? [] : [matchedFiles]
-    case let .paths(paths):
-        paths.map { [$0] }
-    }
+    let filesToStage: [[String]] =
+        switch config {
+            case .matchedFiles:
+                matchedFiles.isEmpty ? [] : [matchedFiles]
+            case .paths(let paths):
+                paths.map { [$0] }
+        }
 
     for batch in filesToStage {
         let result = try runCommand(["git", "add", "--"] + batch, currentDirectory: repoRoot)

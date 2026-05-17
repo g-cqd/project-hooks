@@ -49,10 +49,10 @@ struct LocalizationAnalyzerTests {
     @Test
     func `Multiple issues on multi-line input`() {
         let source = """
-        Text("Hi")
-        Button("Save") { }
-        Section("Section")
-        """
+            Text("Hi")
+            Button("Save") { }
+            Section("Section")
+            """
         let issues = analyzer().analyze(file: fakeURL, source: source)
         #expect(issues.count == 3)
         #expect(issues.map(\.line) == [1, 2, 3])
@@ -120,11 +120,11 @@ struct LocalizationAnalyzerTests {
     @Test
     func `#Preview block contents are skipped`() {
         let source = """
-        #Preview {
-            Text("Preview only")
-            Button("Tap me") { }
-        }
-        """
+            #Preview {
+                Text("Preview only")
+                Button("Tap me") { }
+            }
+            """
         let issues = analyzer().analyze(file: fakeURL, source: source)
         #expect(issues.isEmpty)
     }
@@ -132,9 +132,9 @@ struct LocalizationAnalyzerTests {
     @Test
     func `Code after #Preview block is still scanned`() {
         let source = """
-        #Preview { Text("Hidden") }
-        Text("Visible")
-        """
+            #Preview { Text("Hidden") }
+            Text("Visible")
+            """
         let issues = analyzer().analyze(file: fakeURL, source: source)
         #expect(issues.count == 1)
         #expect(issues.first?.snippet == "Visible")

@@ -7,24 +7,24 @@ struct CheckLocalizationCommand: ParsableCommand {
         commandName: "check-localization",
         abstract: "Find SwiftUI string literals that are missing a comment: argument",
         discussion: """
-        Walks every .swift file under the supplied paths (or individual
-        .swift files when paths are passed directly) and flags Text(...),
-        Button(...), Label(...), Toggle(...), Picker(...), Section(...),
-        TextField(...), .navigationTitle(...), Stepper(...), and
-        DatePicker(...) call sites whose first string literal is not
-        accompanied by a comment: parameter.
+            Walks every .swift file under the supplied paths (or individual
+            .swift files when paths are passed directly) and flags Text(...),
+            Button(...), Label(...), Toggle(...), Picker(...), Section(...),
+            TextField(...), .navigationTitle(...), Stepper(...), and
+            DatePicker(...) call sites whose first string literal is not
+            accompanied by a comment: parameter.
 
-        Skip rules:
-          - Lines containing `String(localized:`, `LocalizedStringKey(`,
-            `LocalizedStringResource(`, `verbatim:`, debug-only APIs
-            (Logger, print, fatalError, etc.).
-          - Lines marked with the escape-hatch comment
-            (`// not-localized` by default).
-          - Files inside #Preview { … } blocks or whose name ends in
-            `Preview.swift` / `Previews.swift`.
+            Skip rules:
+              - Lines containing `String(localized:`, `LocalizedStringKey(`,
+                `LocalizedStringResource(`, `verbatim:`, debug-only APIs
+                (Logger, print, fatalError, etc.).
+              - Lines marked with the escape-hatch comment
+                (`// not-localized` by default).
+              - Files inside #Preview { … } blocks or whose name ends in
+                `Preview.swift` / `Previews.swift`.
 
-        Exit code is 1 when at least one issue is found, 0 otherwise.
-        """,
+            Exit code is 1 when at least one issue is found, 0 otherwise.
+            """,
     )
 
     @Argument(help: "Directories or .swift files to scan (defaults to the current directory)")
@@ -60,7 +60,8 @@ struct CheckLocalizationCommand: ParsableCommand {
         let scanRoots: [URL] = resolved.map {
             URL(fileURLWithPath: $0).standardizedFileURL
         }
-        let excludedSuffixes: [String] = includePreviews
+        let excludedSuffixes: [String] =
+            includePreviews
             ? []
             : ["Preview.swift", "Previews.swift", "+Preview.swift"]
         let config = LocalizationAnalyzer.Configuration(
@@ -71,29 +72,29 @@ struct CheckLocalizationCommand: ParsableCommand {
         let issues = try analyzer.analyze()
 
         switch format {
-        case .text:
-            for issue in issues {
-                FileHandle.standardError.write(Data((issue.formatted + "\n").utf8))
-            }
-            if !issues.isEmpty {
-                FileHandle.standardError.write(
-                    Data("\nFound \(issues.count) localization issue(s).\n".utf8),
-                )
-            }
-        case .json:
-            let payload = issues.map { issue in
-                [
-                    "file": issue.file.path,
-                    "line": issue.line,
-                    "column": issue.column,
-                    "snippet": issue.snippet,
-                    "api": issue.api,
-                    "kind": issue.kind.rawValue,
-                ] as [String: Any]
-            }
-            let data = try JSONSerialization.data(withJSONObject: payload, options: [.prettyPrinted, .sortedKeys])
-            FileHandle.standardOutput.write(data)
-            FileHandle.standardOutput.write(Data("\n".utf8))
+            case .text:
+                for issue in issues {
+                    FileHandle.standardError.write(Data((issue.formatted + "\n").utf8))
+                }
+                if !issues.isEmpty {
+                    FileHandle.standardError.write(
+                        Data("\nFound \(issues.count) localization issue(s).\n".utf8),
+                    )
+                }
+            case .json:
+                let payload = issues.map { issue in
+                    [
+                        "file": issue.file.path,
+                        "line": issue.line,
+                        "column": issue.column,
+                        "snippet": issue.snippet,
+                        "api": issue.api,
+                        "kind": issue.kind.rawValue,
+                    ] as [String: Any]
+                }
+                let data = try JSONSerialization.data(withJSONObject: payload, options: [.prettyPrinted, .sortedKeys])
+                FileHandle.standardOutput.write(data)
+                FileHandle.standardOutput.write(Data("\n".utf8))
         }
 
         if !issues.isEmpty {
@@ -101,7 +102,9 @@ struct CheckLocalizationCommand: ParsableCommand {
         }
     }
 
-    /// Reads a newline-delimited list of file paths from `source`. When
+    /// Reads a newline-delimited list of file paths from `source`.
+    ///
+    /// When
     /// `source == "-"`, reads from stdin (used by pre-commit hooks
     /// that pipe `git diff --cached --name-only` in).
     private static func readPaths(from source: String) throws -> [String] {
@@ -113,7 +116,8 @@ struct CheckLocalizationCommand: ParsableCommand {
             let data = try Data(contentsOf: URL(fileURLWithPath: source))
             raw = String(decoding: data, as: UTF8.self)
         }
-        return raw
+        return
+            raw
             .split(separator: "\n", omittingEmptySubsequences: true)
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty }

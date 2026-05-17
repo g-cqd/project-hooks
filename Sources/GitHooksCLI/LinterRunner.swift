@@ -38,11 +38,12 @@ private func swiftFormatOfficialInvocation(
     files: [String],
     config: String?,
 ) -> LinterInvocation {
-    var args: [String] = if linter.usesSwiftSubcommand {
-        [linter.executablePath, "format", "lint", "--strict"]
-    } else {
-        [linter.executablePath, "lint", "--strict"]
-    }
+    var args: [String] =
+        if linter.usesSwiftSubcommand {
+            [linter.executablePath, "format", "lint", "--strict"]
+        } else {
+            [linter.executablePath, "lint", "--strict"]
+        }
     if let config { args += ["--configuration", config] }
     return LinterInvocation(args: args + files, env: nil)
 }
@@ -60,18 +61,18 @@ private func buildLinterInvocation(
     config: String?,
 ) -> LinterInvocation? {
     switch linter.name {
-    case "SwiftLint":
-        swiftLintInvocation(linter, files: absoluteFiles, config: config)
-    case "SwiftFormat":
-        swiftFormatInvocation(linter, files: relativeFiles, config: config)
-    case "swift-format":
-        swiftFormatOfficialInvocation(linter, files: absoluteFiles, config: config)
-    case "ktlint":
-        LinterInvocation(args: [linter.executablePath] + absoluteFiles, env: nil)
-    case "detekt":
-        detektInvocation(linter, files: absoluteFiles, config: config)
-    default:
-        nil
+        case "SwiftLint":
+            swiftLintInvocation(linter, files: absoluteFiles, config: config)
+        case "SwiftFormat":
+            swiftFormatInvocation(linter, files: relativeFiles, config: config)
+        case "swift-format":
+            swiftFormatOfficialInvocation(linter, files: absoluteFiles, config: config)
+        case "ktlint":
+            LinterInvocation(args: [linter.executablePath] + absoluteFiles, env: nil)
+        case "detekt":
+            detektInvocation(linter, files: absoluteFiles, config: config)
+        default:
+            nil
     }
 }
 
@@ -90,6 +91,7 @@ private func printLinterTimeout(_ linter: DiscoveredLinter, timeout: TimeInterva
 // MARK: - Shared linter runner
 
 /// Run a discovered linter against a set of files with an optional config.
+///
 /// Returns the process exit code.
 func runLinterCommand(
     linter: DiscoveredLinter,
@@ -100,12 +102,14 @@ func runLinterCommand(
 ) throws -> Int32 {
     let absoluteFiles = files.map { "\(repoRoot)/\($0)" }
 
-    guard let invocation = buildLinterInvocation(
-        linter: linter,
-        absoluteFiles: absoluteFiles,
-        relativeFiles: files,
-        config: config,
-    ) else {
+    guard
+        let invocation = buildLinterInvocation(
+            linter: linter,
+            absoluteFiles: absoluteFiles,
+            relativeFiles: files,
+            config: config,
+        )
+    else {
         printWarn("Unknown linter \(linter.name), skipping.")
         return 0
     }
@@ -141,6 +145,7 @@ private func linterHasConfig(_ linter: DiscoveredLinter, repoRoot: String) -> Bo
 }
 
 /// Run a linter against files grouped by their closest config file.
+///
 /// Used by both pre-commit and pre-push commands.
 func runLinterGrouped(
     _ linter: DiscoveredLinter,
@@ -171,12 +176,13 @@ func runLinterGrouped(
 
     for group in groups {
         // Show config path relative to repo root for clarity
-        let configLabel = group.config.map { configPath in
-            if configPath.hasPrefix(repoRoot) {
-                return String(configPath.dropFirst(repoRoot.count + 1))
-            }
-            return configPath
-        } ?? "no config"
+        let configLabel =
+            group.config.map { configPath in
+                if configPath.hasPrefix(repoRoot) {
+                    return String(configPath.dropFirst(repoRoot.count + 1))
+                }
+                return configPath
+            } ?? "no config"
 
         printSection("\(linter.name) (\(configLabel), \(group.files.count) file(s))")
 

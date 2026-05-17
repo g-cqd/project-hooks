@@ -7,6 +7,7 @@ public struct DiscoveredLinter: Equatable {
     public let configCandidates: [String]
     public let platform: Platform
     /// When true, the linter only runs if a config file is found in the repo.
+    ///
     /// Built-in toolchain linters (swift-format) have sensible defaults and don't require config.
     public let requiresConfig: Bool
     /// When true, the linter is invoked via `swift format` subcommand instead of a standalone binary.
@@ -102,11 +103,11 @@ public enum LinterDiscovery {
     ) -> [DiscoveredLinter] {
         let definitions: [(def: LinterDefinition, platform: Platform)]
         switch platform {
-        case .ios: definitions = iosDefinitions.map { ($0, .ios) }
-        case .android: definitions = androidDefinitions.map { ($0, .android) }
-        case .mixed:
-            definitions = iosDefinitions.map { ($0, .ios) } + androidDefinitions.map { ($0, .android) }
-        case .unknown: return []
+            case .ios: definitions = iosDefinitions.map { ($0, .ios) }
+            case .android: definitions = androidDefinitions.map { ($0, .android) }
+            case .mixed:
+                definitions = iosDefinitions.map { ($0, .ios) } + androidDefinitions.map { ($0, .android) }
+            case .unknown: return []
         }
 
         return definitions.compactMap { item in
@@ -127,7 +128,8 @@ public enum LinterDiscovery {
 
             // Fall back to `swift` binary for tools bundled in the Swift toolchain
             if item.def.canFallbackToSwift,
-               let swiftPath = resolveExecutable(name: "swift", fallbackRelativePath: nil, repoRoot: repoRoot) {
+                let swiftPath = resolveExecutable(name: "swift", fallbackRelativePath: nil, repoRoot: repoRoot)
+            {
                 return DiscoveredLinter(
                     name: item.def.name,
                     executablePath: swiftPath,
@@ -145,10 +147,10 @@ public enum LinterDiscovery {
     /// Find the file extension filter for a linter's platform.
     public static func fileExtensions(for platform: Platform) -> [String] {
         switch platform {
-        case .ios: [".swift"]
-        case .android: [".kt", ".kts", ".java"]
-        case .mixed: [".swift", ".kt", ".kts", ".java"]
-        case .unknown: []
+            case .ios: [".swift"]
+            case .android: [".kt", ".kts", ".java"]
+            case .mixed: [".swift", ".kt", ".kts", ".java"]
+            case .unknown: []
         }
     }
 

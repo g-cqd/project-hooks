@@ -4,7 +4,7 @@ import PackageDescription
 let package = Package(
     name: "ProjectHooks",
     platforms: [
-        .macOS(.v26),
+        .macOS(.v26)
     ],
     products: [
         .library(name: "GitHooksCore", targets: ["GitHooksCore"]),
@@ -18,7 +18,7 @@ let package = Package(
         .target(
             name: "GitHooksCore",
             dependencies: [
-                .product(name: "Yams", package: "Yams"),
+                .product(name: "Yams", package: "Yams")
             ],
         ),
         .executableTarget(

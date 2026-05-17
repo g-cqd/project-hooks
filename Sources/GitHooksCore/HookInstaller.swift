@@ -6,40 +6,41 @@ public enum HookInstaller {
 
     /// Generate the hook script content that delegates to the project-hooks binary.
     public static func hookScript(binaryPath: String? = nil) -> String {
-        let binaryCandidate = if let binaryPath {
-            """
-              \(shellQuoted(binaryPath)) \\
-            """
-        } else {
-            ""
-        }
+        let binaryCandidate =
+            if let binaryPath {
+                """
+                  \(shellQuoted(binaryPath)) \\
+                """
+            } else {
+                ""
+            }
 
         return """
-        #!/usr/bin/env bash
-        set -euo pipefail
+            #!/usr/bin/env bash
+            set -euo pipefail
 
-        HOOK_NAME="$(basename "$0")"
-        REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+            HOOK_NAME="$(basename "$0")"
+            REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || true)"
 
-        BIN=""
-        for candidate in \\
-          "${REPO_ROOT:+$REPO_ROOT/.build/release/project-hooks}" \\
-        \(binaryCandidate)  "$HOME/.local/bin/project-hooks" \\
-          "$(command -v project-hooks 2>/dev/null || true)"; do
-          if [[ -n "$candidate" && -x "$candidate" ]]; then
-            BIN="$candidate"
-            break
-          fi
-        done
+            BIN=""
+            for candidate in \\
+              "${REPO_ROOT:+$REPO_ROOT/.build/release/project-hooks}" \\
+            \(binaryCandidate)  "$HOME/.local/bin/project-hooks" \\
+              "$(command -v project-hooks 2>/dev/null || true)"; do
+              if [[ -n "$candidate" && -x "$candidate" ]]; then
+                BIN="$candidate"
+                break
+              fi
+            done
 
-        if [[ -z "$BIN" ]]; then
-          echo "[ERROR] project-hooks binary not found." >&2
-          echo "[INFO] Install with: swift build -c release" >&2
-          exit 1
-        fi
+            if [[ -z "$BIN" ]]; then
+              echo "[ERROR] project-hooks binary not found." >&2
+              echo "[INFO] Install with: swift build -c release" >&2
+              exit 1
+            fi
 
-        exec "$BIN" "$HOOK_NAME" "$@"
-        """
+            exec "$BIN" "$HOOK_NAME" "$@"
+            """
     }
 
     /// Write hook scripts to a hooks directory.
@@ -47,6 +48,7 @@ public enum HookInstaller {
     ///   - hooksDir: Path to the hooks directory (e.g. `.git/hooks` or `~/.git-templates/hooks`)
     ///   - binaryPath: Optional explicit path to the project-hooks binary to embed in the script
     /// - Returns: List of installed hook file paths.
+    /// - Throws: Any `FileManager` error from creating the hooks directory or writing each script.
     public static func installHooks(
         to hooksDir: String,
         binaryPath: String? = nil,
