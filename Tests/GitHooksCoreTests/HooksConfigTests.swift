@@ -15,21 +15,21 @@ struct HooksConfigTests {
     @Test
     func `parse pre commit tasks`() throws {
         let yaml = """
-        pre-commit:
-          tasks:
-            - name: "Lint strings"
-              run: "swift scripts/lint.swift"
-              on-files:
-                - "*.strings"
-              restage: true
-              timeout: 60
-            - name: "Swiftgen"
-              run: "swiftgen config run"
-              after: "Lint strings"
-              restage:
-                - "Generated/"
-              timeout: 30
-        """
+            pre-commit:
+              tasks:
+                - name: "Lint strings"
+                  run: "swift scripts/lint.swift"
+                  on-files:
+                    - "*.strings"
+                  restage: true
+                  timeout: 60
+                - name: "Swiftgen"
+                  run: "swiftgen config run"
+                  after: "Lint strings"
+                  restage:
+                    - "Generated/"
+                  timeout: 30
+            """
 
         let config = try HooksConfig.parse(yaml: yaml)
 
@@ -51,13 +51,13 @@ struct HooksConfigTests {
     @Test
     func `parse pre push commit message`() throws {
         let yaml = """
-        pre-push:
-          commit-message:
-            pattern: "^PROJ-\\\\d{4}\\\\s"
-            error: "Must start with PROJ-XXXX"
-          reject-trailers:
-            - "Co-authored-by"
-        """
+            pre-push:
+              commit-message:
+                pattern: "^PROJ-\\\\d{4}\\\\s"
+                error: "Must start with PROJ-XXXX"
+              reject-trailers:
+                - "Co-authored-by"
+            """
 
         let config = try HooksConfig.parse(yaml: yaml)
 
@@ -70,12 +70,12 @@ struct HooksConfigTests {
     @Test
     func `parse pre push commit message with base`() throws {
         let yaml = """
-        pre-push:
-          commit-message:
-            pattern: "^PROJ-\\\\d{4}\\\\s"
-            error: "Must start with PROJ-XXXX"
-            base: "origin/develop"
-        """
+            pre-push:
+              commit-message:
+                pattern: "^PROJ-\\\\d{4}\\\\s"
+                error: "Must start with PROJ-XXXX"
+                base: "origin/develop"
+            """
 
         let config = try HooksConfig.parse(yaml: yaml)
 
@@ -85,12 +85,12 @@ struct HooksConfigTests {
     @Test
     func `parse pre push commit message treats empty base as nil`() throws {
         let yaml = """
-        pre-push:
-          commit-message:
-            pattern: "^X"
-            error: "x"
-            base: ""
-        """
+            pre-push:
+              commit-message:
+                pattern: "^X"
+                error: "x"
+                base: ""
+            """
 
         let config = try HooksConfig.parse(yaml: yaml)
 
@@ -100,23 +100,23 @@ struct HooksConfigTests {
     @Test
     func `parse pr-size full config`() throws {
         let yaml = """
-        pre-push:
-          pr-size:
-            mode: fail
-            max-additions: 500
-            max-deletions: 400
-            max-files: 20
-            max-cognitive-score: 15.0
-            max-scatter: 3.5
-            volume-weight: 1.2
-            scatter-weight: 0.8
-            test-compensation: 0.5
-            exclude:
-              - "Generated/*"
-              - "Package.resolved"
-            test-patterns:
-              - "Specs/*"
-        """
+            pre-push:
+              pr-size:
+                mode: fail
+                max-additions: 500
+                max-deletions: 400
+                max-files: 20
+                max-cognitive-score: 15.0
+                max-scatter: 3.5
+                volume-weight: 1.2
+                scatter-weight: 0.8
+                test-compensation: 0.5
+                exclude:
+                  - "Generated/*"
+                  - "Package.resolved"
+                test-patterns:
+                  - "Specs/*"
+            """
 
         let config = try HooksConfig.parse(yaml: yaml)
         let prSize = try #require(config.prePush.prSize)
@@ -137,9 +137,9 @@ struct HooksConfigTests {
     @Test
     func `parse pr-size defaults when block is empty`() throws {
         let yaml = """
-        pre-push:
-          pr-size: {}
-        """
+            pre-push:
+              pr-size: {}
+            """
 
         let config = try HooksConfig.parse(yaml: yaml)
         let prSize = try #require(config.prePush.prSize)
@@ -156,10 +156,10 @@ struct HooksConfigTests {
     @Test
     func `parse pr-size unknown mode falls back to warn`() throws {
         let yaml = """
-        pre-push:
-          pr-size:
-            mode: nuke
-        """
+            pre-push:
+              pr-size:
+                mode: nuke
+            """
 
         let config = try HooksConfig.parse(yaml: yaml)
         #expect(config.prePush.prSize?.mode == .warn)
@@ -168,10 +168,10 @@ struct HooksConfigTests {
     @Test
     func `parse pr-size empty test-patterns disables defaults`() throws {
         let yaml = """
-        pre-push:
-          pr-size:
-            test-patterns: []
-        """
+            pre-push:
+              pr-size:
+                test-patterns: []
+            """
 
         let config = try HooksConfig.parse(yaml: yaml)
         let prSize = try #require(config.prePush.prSize)
@@ -184,12 +184,12 @@ struct HooksConfigTests {
     func `parse pr-size explicit null disables threshold`() throws {
         // YAML null on a threshold should disable it (not fall back to the default).
         let yaml = """
-        pre-push:
-          pr-size:
-            max-additions: ~
-            max-deletions: null
-            max-cognitive-score: null
-        """
+            pre-push:
+              pr-size:
+                max-additions: ~
+                max-deletions: null
+                max-cognitive-score: null
+            """
 
         let config = try HooksConfig.parse(yaml: yaml)
         let prSize = try #require(config.prePush.prSize)
@@ -206,12 +206,12 @@ struct HooksConfigTests {
         // Weights are non-nullable on the struct; an explicit null is treated as
         // "use the default" since a weight of 0 already means "disable that term".
         let yaml = """
-        pre-push:
-          pr-size:
-            volume-weight: ~
-            scatter-weight: ~
-            test-compensation: ~
-        """
+            pre-push:
+              pr-size:
+                volume-weight: ~
+                scatter-weight: ~
+                test-compensation: ~
+            """
 
         let config = try HooksConfig.parse(yaml: yaml)
         let prSize = try #require(config.prePush.prSize)
@@ -225,11 +225,11 @@ struct HooksConfigTests {
     @Test
     func `pr-size is nil when not configured`() throws {
         let yaml = """
-        pre-push:
-          commit-message:
-            pattern: "."
-            error: "x"
-        """
+            pre-push:
+              commit-message:
+                pattern: "."
+                error: "x"
+            """
 
         let config = try HooksConfig.parse(yaml: yaml)
         #expect(config.prePush.prSize == nil)
@@ -239,14 +239,14 @@ struct HooksConfigTests {
     @Test
     func `parse pre-commit pr-size full config`() throws {
         let yaml = """
-        pre-commit:
-          pr-size:
-            mode: fail
-            max-additions: 300
-            max-cognitive-score: 12.0
-            exclude:
-              - "Generated/*"
-        """
+            pre-commit:
+              pr-size:
+                mode: fail
+                max-additions: 300
+                max-cognitive-score: 12.0
+                exclude:
+                  - "Generated/*"
+            """
 
         let config = try HooksConfig.parse(yaml: yaml)
         let prSize = try #require(config.preCommit.prSize)
@@ -262,15 +262,15 @@ struct HooksConfigTests {
     @Test
     func `parse pre-commit and pre-push pr-size are independent`() throws {
         let yaml = """
-        pre-commit:
-          pr-size:
-            mode: warn
-            max-additions: 200
-        pre-push:
-          pr-size:
-            mode: fail
-            max-additions: 800
-        """
+            pre-commit:
+              pr-size:
+                mode: warn
+                max-additions: 200
+            pre-push:
+              pr-size:
+                mode: fail
+                max-additions: 800
+            """
 
         let config = try HooksConfig.parse(yaml: yaml)
 
@@ -283,9 +283,9 @@ struct HooksConfigTests {
     @Test
     func `parse pre-commit pr-size defaults when block is empty`() throws {
         let yaml = """
-        pre-commit:
-          pr-size: {}
-        """
+            pre-commit:
+              pr-size: {}
+            """
 
         let config = try HooksConfig.parse(yaml: yaml)
         let prSize = try #require(config.preCommit.prSize)
@@ -299,17 +299,17 @@ struct HooksConfigTests {
     @Test
     func `parse test override`() throws {
         let yaml = """
-        pre-push:
-          test-override:
-            type: xcodebuild
-            project: "App.xcodeproj"
-            scheme: "AppTests"
-            test-plan: "config/tests.xctestplan"
-            destination: "platform=iOS Simulator,name=iPhone 16"
-            broad-impact-paths:
-              - "App.xcodeproj/"
-              - "Package.swift"
-        """
+            pre-push:
+              test-override:
+                type: xcodebuild
+                project: "App.xcodeproj"
+                scheme: "AppTests"
+                test-plan: "config/tests.xctestplan"
+                destination: "platform=iOS Simulator,name=iPhone 16"
+                broad-impact-paths:
+                  - "App.xcodeproj/"
+                  - "Package.swift"
+            """
 
         let config = try HooksConfig.parse(yaml: yaml)
         let override = config.prePush.testOverride
@@ -334,10 +334,10 @@ struct HooksConfigTests {
         defer { try? FileManager.default.removeItem(at: dir) }
 
         let yaml = """
-        pre-push:
-          reject-trailers:
-            - "Signed-off-by"
-        """
+            pre-push:
+              reject-trailers:
+                - "Signed-off-by"
+            """
 
         try yaml.write(
             to: dir.appendingPathComponent(".project-hooks.yml"),
@@ -352,14 +352,14 @@ struct HooksConfigTests {
     @Test
     func `parse pre push tasks along with commit message`() throws {
         let yaml = """
-        pre-push:
-          commit-message:
-            pattern: "^FIX-\\\\d+"
-            error: "Need ticket"
-          tasks:
-            - name: "Changelog"
-              run: "scripts/check-changelog.sh"
-        """
+            pre-push:
+              commit-message:
+                pattern: "^FIX-\\\\d+"
+                error: "Need ticket"
+              tasks:
+                - name: "Changelog"
+                  run: "scripts/check-changelog.sh"
+            """
 
         let config = try HooksConfig.parse(yaml: yaml)
         #expect(config.prePush.commitMessage != nil)
@@ -370,11 +370,11 @@ struct HooksConfigTests {
     @Test
     func `parse gradle test override with task`() throws {
         let yaml = """
-        pre-push:
-          test-override:
-            type: gradle
-            task: ":base:testDevelopDebugUnitTest"
-        """
+            pre-push:
+              test-override:
+                type: gradle
+                task: ":base:testDevelopDebugUnitTest"
+            """
         let config = try HooksConfig.parse(yaml: yaml)
         let override = try #require(config.prePush.testOverride)
         #expect(override.type == .gradle)
@@ -384,10 +384,10 @@ struct HooksConfigTests {
     @Test
     func `gradle test override task is optional`() throws {
         let yaml = """
-        pre-push:
-          test-override:
-            type: gradle
-        """
+            pre-push:
+              test-override:
+                type: gradle
+            """
         let config = try HooksConfig.parse(yaml: yaml)
         #expect(config.prePush.testOverride?.task == nil)
     }
@@ -395,31 +395,32 @@ struct HooksConfigTests {
     @Test
     func `parse extra-args on test override`() throws {
         let yaml = """
-        pre-push:
-          test-override:
-            type: xcodebuild
-            scheme: "App"
-            extra-args:
-              - "-skipPackagePluginValidation"
-              - "-quiet"
-              - "OTHER_SWIFT_FLAGS=-D SKIP_FORMAT"
-        """
+            pre-push:
+              test-override:
+                type: xcodebuild
+                scheme: "App"
+                extra-args:
+                  - "-skipPackagePluginValidation"
+                  - "-quiet"
+                  - "OTHER_SWIFT_FLAGS=-D SKIP_FORMAT"
+            """
         let config = try HooksConfig.parse(yaml: yaml)
         let override = try #require(config.prePush.testOverride)
-        #expect(override.extraArgs == [
-            "-skipPackagePluginValidation",
-            "-quiet",
-            "OTHER_SWIFT_FLAGS=-D SKIP_FORMAT",
-        ])
+        #expect(
+            override.extraArgs == [
+                "-skipPackagePluginValidation",
+                "-quiet",
+                "OTHER_SWIFT_FLAGS=-D SKIP_FORMAT",
+            ])
     }
 
     @Test
     func `extra-args is optional`() throws {
         let yaml = """
-        pre-push:
-          test-override:
-            type: gradle
-        """
+            pre-push:
+              test-override:
+                type: gradle
+            """
         let config = try HooksConfig.parse(yaml: yaml)
         #expect(config.prePush.testOverride?.extraArgs == nil)
     }
@@ -427,11 +428,11 @@ struct HooksConfigTests {
     @Test
     func `parse test override skip flag`() throws {
         let yaml = """
-        pre-push:
-          test-override:
-            type: xcodebuild
-            skip: true
-        """
+            pre-push:
+              test-override:
+                type: xcodebuild
+                skip: true
+            """
         let config = try HooksConfig.parse(yaml: yaml)
         let override = try #require(config.prePush.testOverride)
         #expect(override.skip)
@@ -441,10 +442,10 @@ struct HooksConfigTests {
     @Test
     func `parse test override skip without type`() throws {
         let yaml = """
-        pre-push:
-          test-override:
-            skip: true
-        """
+            pre-push:
+              test-override:
+                skip: true
+            """
         let config = try HooksConfig.parse(yaml: yaml)
         let override = try #require(config.prePush.testOverride)
         #expect(override.skip)
@@ -453,10 +454,10 @@ struct HooksConfigTests {
     @Test
     func `parse test override defaults skip to false`() throws {
         let yaml = """
-        pre-push:
-          test-override:
-            type: xcodebuild
-        """
+            pre-push:
+              test-override:
+                type: xcodebuild
+            """
         let config = try HooksConfig.parse(yaml: yaml)
         let override = try #require(config.prePush.testOverride)
         #expect(!override.skip)
@@ -465,10 +466,10 @@ struct HooksConfigTests {
     @Test
     func `override without type and without skip is rejected`() throws {
         let yaml = """
-        pre-push:
-          test-override:
-            destination: "platform=iOS Simulator,name=iPhone 17"
-        """
+            pre-push:
+              test-override:
+                destination: "platform=iOS Simulator,name=iPhone 17"
+            """
         let config = try HooksConfig.parse(yaml: yaml)
         #expect(config.prePush.testOverride == nil)
     }
@@ -476,11 +477,11 @@ struct HooksConfigTests {
     @Test
     func `parse test override rejects unknown type`() throws {
         let yaml = """
-        pre-push:
-          test-override:
-            type: xocedubild
-            project: "App.xcodeproj"
-        """
+            pre-push:
+              test-override:
+                type: xocedubild
+                project: "App.xcodeproj"
+            """
 
         let config = try HooksConfig.parse(yaml: yaml)
         // Unknown type should be rejected at parse time, not silently passed through
@@ -490,14 +491,14 @@ struct HooksConfigTests {
     @Test
     func `parse branch name`() throws {
         let yaml = """
-        pre-push:
-          branch-name:
-            pattern: "^(feature|bugfix)/.+"
-            error: "Bad branch"
-            skip:
-              - "main"
-              - "develop"
-        """
+            pre-push:
+              branch-name:
+                pattern: "^(feature|bugfix)/.+"
+                error: "Bad branch"
+                skip:
+                  - "main"
+                  - "develop"
+            """
         let config = try HooksConfig.parse(yaml: yaml)
         let branch = try #require(config.prePush.branchName)
         #expect(branch.pattern == "^(feature|bugfix)/.+")
@@ -508,11 +509,11 @@ struct HooksConfigTests {
     @Test
     func `branch name skip defaults to empty`() throws {
         let yaml = """
-        pre-push:
-          branch-name:
-            pattern: ".+"
-            error: "x"
-        """
+            pre-push:
+              branch-name:
+                pattern: ".+"
+                error: "x"
+            """
         let config = try HooksConfig.parse(yaml: yaml)
         #expect(config.prePush.branchName?.skip == [])
     }
@@ -520,10 +521,10 @@ struct HooksConfigTests {
     @Test
     func `branch name requires both pattern and error`() throws {
         let yaml = """
-        pre-push:
-          branch-name:
-            pattern: ".+"
-        """
+            pre-push:
+              branch-name:
+                pattern: ".+"
+            """
         let config = try HooksConfig.parse(yaml: yaml)
         #expect(config.prePush.branchName == nil)
     }
@@ -531,25 +532,25 @@ struct HooksConfigTests {
     @Test
     func `parse work scope minimal`() throws {
         let yaml = """
-        pre-push:
-          work-scope:
-            base: "origin/develop"
-        """
+            pre-push:
+              work-scope:
+                base: "origin/develop"
+            """
         let config = try HooksConfig.parse(yaml: yaml)
         let scope = try #require(config.prePush.workScope)
         #expect(scope.base == "origin/develop")
-        #expect(scope.walk == .firstParent) // default
+        #expect(scope.walk == .firstParent)  // default
         #expect(scope.commitFilter == nil)
     }
 
     @Test
     func `parse work scope with explicit walk default`() throws {
         let yaml = """
-        pre-push:
-          work-scope:
-            base: "origin/main"
-            walk: default
-        """
+            pre-push:
+              work-scope:
+                base: "origin/main"
+                walk: default
+            """
         let config = try HooksConfig.parse(yaml: yaml)
         #expect(config.prePush.workScope?.walk == .default)
     }
@@ -557,11 +558,11 @@ struct HooksConfigTests {
     @Test
     func `parse work scope unknown walk falls back to first parent`() throws {
         let yaml = """
-        pre-push:
-          work-scope:
-            base: "origin/main"
-            walk: nonsense
-        """
+            pre-push:
+              work-scope:
+                base: "origin/main"
+                walk: nonsense
+            """
         let config = try HooksConfig.parse(yaml: yaml)
         #expect(config.prePush.workScope?.walk == .firstParent)
     }
@@ -569,10 +570,10 @@ struct HooksConfigTests {
     @Test
     func `work scope without base is ignored`() throws {
         let yaml = """
-        pre-push:
-          work-scope:
-            walk: first-parent
-        """
+            pre-push:
+              work-scope:
+                walk: first-parent
+            """
         let config = try HooksConfig.parse(yaml: yaml)
         #expect(config.prePush.workScope == nil)
     }
@@ -580,15 +581,15 @@ struct HooksConfigTests {
     @Test
     func `parse work scope commit filter`() throws {
         let yaml = """
-        pre-push:
-          work-scope:
-            base: "origin/develop"
-            commit-filter:
-              branch-pattern: "MAIN-\\\\d+"
-              commit-pattern: "^MAIN-\\\\d+"
-              on-mismatch: fail
-              include-merges: false
-        """
+            pre-push:
+              work-scope:
+                base: "origin/develop"
+                commit-filter:
+                  branch-pattern: "MAIN-\\\\d+"
+                  commit-pattern: "^MAIN-\\\\d+"
+                  on-mismatch: fail
+                  include-merges: false
+            """
         let config = try HooksConfig.parse(yaml: yaml)
         let filter = try #require(config.prePush.workScope?.commitFilter)
         #expect(filter.branchPattern == "MAIN-\\d+")
@@ -600,13 +601,13 @@ struct HooksConfigTests {
     @Test
     func `commit filter defaults`() throws {
         let yaml = """
-        pre-push:
-          work-scope:
-            base: "origin/develop"
-            commit-filter:
-              branch-pattern: "X-\\\\d+"
-              commit-pattern: "^X-\\\\d+"
-        """
+            pre-push:
+              work-scope:
+                base: "origin/develop"
+                commit-filter:
+                  branch-pattern: "X-\\\\d+"
+                  commit-pattern: "^X-\\\\d+"
+            """
         let config = try HooksConfig.parse(yaml: yaml)
         let filter = try #require(config.prePush.workScope?.commitFilter)
         #expect(filter.onMismatch == .warn)

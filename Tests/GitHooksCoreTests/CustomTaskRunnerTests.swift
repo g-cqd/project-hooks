@@ -39,10 +39,11 @@ struct FileGlobMatcherTests {
             "Plurals.stringsdict",
         ]
         let result = FileGlobMatcher.filter(files, matching: ["*.strings", "*.stringsdict"])
-        #expect(result == [
-            "Resources/en.lproj/Localizable.strings",
-            "Plurals.stringsdict",
-        ])
+        #expect(
+            result == [
+                "Resources/en.lproj/Localizable.strings",
+                "Plurals.stringsdict",
+            ])
     }
 
     @Test
@@ -101,7 +102,7 @@ struct TaskDependencyResolverTests {
     @Test
     func `returns nil for dependency on non existent task`() {
         let tasks = [
-            HooksConfig.CustomTask(name: "B", run: "echo B", after: "NonExistent"),
+            HooksConfig.CustomTask(name: "B", run: "echo B", after: "NonExistent")
         ]
         // Missing dependency should return nil (same as unresolvable)
         #expect(TaskDependencyResolver.resolve(tasks) == nil)

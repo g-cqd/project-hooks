@@ -48,7 +48,7 @@ struct TestOutputParserTests {
     @Test
     func `find last started test detects gradle started`() {
         let lines = [
-            "com.example.MyTest > testSomething STARTED",
+            "com.example.MyTest > testSomething STARTED"
         ]
         let result = TestOutputParser.findLastStartedTest(lines: lines)
         #expect(result != nil)
@@ -167,7 +167,7 @@ struct TestOutputParserTests {
     @Test
     func `extract errors from xcodebuild test failed`() {
         let lines = [
-            "** TEST FAILED **",
+            "** TEST FAILED **"
         ]
         let errors = TestOutputParser.extractErrors(lines: lines)
         #expect(errors.count == 1)
@@ -176,7 +176,7 @@ struct TestOutputParserTests {
     @Test
     func `extract errors from gradle build failed`() {
         let lines = [
-            "BUILD FAILED in 10s",
+            "BUILD FAILED in 10s"
         ]
         let errors = TestOutputParser.extractErrors(lines: lines)
         #expect(errors.count == 1)
@@ -207,7 +207,7 @@ struct TestOutputParserTests {
     @Test
     func `extract test summary from XC test`() {
         let lines = [
-            "Executed 12 tests, with 0 failures (0 unexpected) in 1.5 seconds",
+            "Executed 12 tests, with 0 failures (0 unexpected) in 1.5 seconds"
         ]
         let summary = TestOutputParser.extractTestSummary(lines: lines)
         #expect(summary?.contains("12 tests") == true)
@@ -216,7 +216,7 @@ struct TestOutputParserTests {
     @Test
     func `extract test summary skips XC test with zero tests`() {
         let lines = [
-            "Executed 0 tests, with 0 failures (0 unexpected) in 0.0 seconds",
+            "Executed 0 tests, with 0 failures (0 unexpected) in 0.0 seconds"
         ]
         // Zero tests executed should return nil (not a meaningful summary)
         #expect(TestOutputParser.extractTestSummary(lines: lines) == nil)
@@ -225,7 +225,7 @@ struct TestOutputParserTests {
     @Test
     func `extract test summary from gradle`() {
         let lines = [
-            "BUILD SUCCESSFUL in 15s",
+            "BUILD SUCCESSFUL in 15s"
         ]
         let summary = TestOutputParser.extractTestSummary(lines: lines)
         #expect(summary?.contains("BUILD SUCCESSFUL") == true)
@@ -261,7 +261,7 @@ struct TestOutputParserTests {
     @Test
     func `detect no-op: scheme test action not configured`() {
         let lines = [
-            "xcodebuild: error: Scheme LotoBuddy is not currently configured for the test action.",
+            "xcodebuild: error: Scheme LotoBuddy is not currently configured for the test action."
         ]
         #expect(TestOutputParser.detectNoOpExitReason(lines: lines) == .schemeTestActionNotConfigured)
     }

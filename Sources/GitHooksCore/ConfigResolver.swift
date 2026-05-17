@@ -3,6 +3,7 @@ import Foundation
 /// Resolves the closest configuration file for a given path by walking up the directory tree.
 public enum ConfigResolver {
     /// Walk up from `filePath` (relative to `repoRoot`) looking for any of `candidates`.
+    ///
     /// Returns the absolute path of the first matching config file found, or `nil`.
     ///
     /// Example: for file `ModuleA/Sources/Foo.swift` and candidates `[".swiftlint.yml"]`,
@@ -35,7 +36,9 @@ public enum ConfigResolver {
         return nil
     }
 
-    /// Group files by their closest config file. Files that share the same config are grouped together.
+    /// Group files by their closest config file.
+    ///
+    /// Files that share the same config are grouped together.
     /// Files with no matching config are grouped under the `nil` key.
     public static func groupFilesByConfig(
         files: [String],
@@ -53,7 +56,8 @@ public enum ConfigResolver {
             }
         }
 
-        var result: [(config: String?, files: [String])] = groups
+        var result: [(config: String?, files: [String])] =
+            groups
             .sorted { $0.key < $1.key }
             .map { (config: $0.key as String?, files: $0.value) }
 

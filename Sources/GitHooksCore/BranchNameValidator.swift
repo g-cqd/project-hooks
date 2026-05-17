@@ -40,7 +40,8 @@ public enum BranchNameValidator {
         return Failure(branch: branchName, reason: config.error)
     }
 
-    /// Strip a "refs/heads/" prefix to surface a user-facing branch name.
+    /// Strips a `refs/heads/` prefix to surface a user-facing branch name.
+    ///
     /// Returns the original string if no prefix is present.
     public static func shortBranchName(fromRef ref: String) -> String {
         let prefix = "refs/heads/"

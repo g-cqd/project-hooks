@@ -63,6 +63,7 @@ private func printFailureDiagnosis(lines: [String], moduleName: String) {
 }
 
 /// Outcome of a test runner invocation as interpreted by the diagnosis layer.
+///
 /// Distinguishes "this module has no tests to run" (soft no-op, push proceeds)
 /// from "tests actually failed" (hard fail, push blocked).
 enum TestRunOutcome: Equatable {

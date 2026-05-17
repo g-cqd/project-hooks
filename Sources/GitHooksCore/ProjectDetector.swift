@@ -22,9 +22,11 @@ public enum ProjectDetector {
             $0.hasSuffix(".xcodeproj") || $0.hasSuffix(".xcworkspace")
         }
 
-        let hasGradleBuild = fileManager.fileExists(atPath: rootURL.appendingPathComponent("build.gradle").path)
+        let hasGradleBuild =
+            fileManager.fileExists(atPath: rootURL.appendingPathComponent("build.gradle").path)
             || fileManager.fileExists(atPath: rootURL.appendingPathComponent("build.gradle.kts").path)
-        let hasSettingsGradle = fileManager.fileExists(atPath: rootURL.appendingPathComponent("settings.gradle").path)
+        let hasSettingsGradle =
+            fileManager.fileExists(atPath: rootURL.appendingPathComponent("settings.gradle").path)
             || fileManager.fileExists(atPath: rootURL.appendingPathComponent("settings.gradle.kts").path)
 
         let isIOS = hasSwiftPackage || hasXcodeproj

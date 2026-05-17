@@ -62,8 +62,9 @@ struct PreCommitCommand: ParsableCommand {
 
 // MARK: - PR size check (pre-commit, branch-cumulative)
 
-/// Run the PR-size check at commit time using a branch-cumulative diff:
-/// `merge-base(HEAD, base)..index`. This is the early-warning sibling of the
+/// Runs the PR-size check at commit time using a branch-cumulative diff.
+///
+/// Uses `merge-base(HEAD, base)..index`. This is the early-warning sibling of the
 /// pre-push check — it scores what the PR *would* look like if this commit
 /// shipped right now, so reviewers don't only discover an oversized change at
 /// push time.
@@ -83,11 +84,13 @@ private func runPreCommitPRSizeCheck(
         return
     }
 
-    guard let baseSHA = try gitFirstLine(
-        ["rev-parse", "--verify", "--quiet", base],
-        repoRoot: repoRoot,
-        allowFailure: true,
-    ) else {
+    guard
+        let baseSHA = try gitFirstLine(
+            ["rev-parse", "--verify", "--quiet", base],
+            repoRoot: repoRoot,
+            allowFailure: true,
+        )
+    else {
         printWarn("pre-commit pr-size: base '\(base)' not found — skipping.")
         return
     }
@@ -99,17 +102,20 @@ private func runPreCommitPRSizeCheck(
         allowFailure: true,
     )
 
-    let diffBase: String = if let head, let mergeBase = try gitFirstLine(
-        ["merge-base", head, baseSHA],
-        repoRoot: repoRoot,
-        allowFailure: true,
-    ) {
-        mergeBase
-    } else {
-        // No HEAD (initial commit) or disjoint history: fall back to comparing
-        // the index directly against the baseline ref.
-        baseSHA
-    }
+    let diffBase: String =
+        if let head,
+            let mergeBase = try gitFirstLine(
+                ["merge-base", head, baseSHA],
+                repoRoot: repoRoot,
+                allowFailure: true,
+            )
+        {
+            mergeBase
+        } else {
+            // No HEAD (initial commit) or disjoint history: fall back to comparing
+            // the index directly against the baseline ref.
+            baseSHA
+        }
 
     let result = try runCommand(
         ["git", "diff", "--no-renames", "--numstat", "-z", "--diff-filter=ACMR", "--cached", diffBase, "--"],

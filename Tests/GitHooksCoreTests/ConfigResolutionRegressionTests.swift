@@ -1,6 +1,7 @@
 import Foundation
-@testable import GitHooksCore
 import Testing
+
+@testable import GitHooksCore
 
 struct ConfigResolutionRegressionTests {
     // MARK: - Fallback chain with real files
@@ -17,11 +18,11 @@ struct ConfigResolutionRegressionTests {
         try FileManager.default.createDirectory(at: xdgDir, withIntermediateDirectories: true)
 
         let yaml = """
-        pre-commit:
-          tasks:
-            - name: xdg-task
-              run: echo xdg
-        """
+            pre-commit:
+              tasks:
+                - name: xdg-task
+                  run: echo xdg
+            """
         try yaml.write(to: xdgDir.appendingPathComponent("config.yml"), atomically: true, encoding: .utf8)
 
         let config = try HooksConfig.loadUserConfig(
@@ -42,10 +43,10 @@ struct ConfigResolutionRegressionTests {
         try FileManager.default.createDirectory(at: repoRoot, withIntermediateDirectories: true)
 
         let yaml = """
-        pre-push:
-          reject-trailers:
-            - "Signed-off-by"
-        """
+            pre-push:
+              reject-trailers:
+                - "Signed-off-by"
+            """
         let homePath = dir.appendingPathComponent(".project-hooks.yml")
         try yaml.write(to: homePath, atomically: true, encoding: .utf8)
 
@@ -71,8 +72,8 @@ struct ConfigResolutionRegressionTests {
         defer { try? FileManager.default.removeItem(at: dir) }
 
         let yaml = """
-        projects: {}
-        """
+            projects: {}
+            """
         let path = dir.appendingPathComponent("config.yml")
         try yaml.write(to: path, atomically: true, encoding: .utf8)
 
@@ -87,13 +88,13 @@ struct ConfigResolutionRegressionTests {
 
         let homeDir = FileManager.default.homeDirectoryForCurrentUser.path
         let yaml = """
-        projects:
-          ~/Developer/work/*:
-            pre-commit:
-              tasks:
-                - name: work-lint
-                  run: swiftlint
-        """
+            projects:
+              ~/Developer/work/*:
+                pre-commit:
+                  tasks:
+                    - name: work-lint
+                      run: swiftlint
+            """
         let path = dir.appendingPathComponent("config.yml")
         try yaml.write(to: path, atomically: true, encoding: .utf8)
 
@@ -136,8 +137,8 @@ struct ConfigResolutionRegressionTests {
                 "tasks": [
                     ["name": "valid-task", "run": "echo ok"],
                     ["broken": true],
-                ],
-            ],
+                ]
+            ]
         ]
 
         let result = try HooksConfig.parseProjectsList(
@@ -182,17 +183,17 @@ struct ConfigResolutionRegressionTests {
         defer { try? FileManager.default.removeItem(at: dir) }
 
         let yaml = """
-        projects:
-          /tmp/repo:
+            projects:
+              /tmp/repo:
+                pre-commit:
+                  tasks:
+                    - name: projects-task
+                      run: echo from-projects
             pre-commit:
               tasks:
-                - name: projects-task
-                  run: echo from-projects
-        pre-commit:
-          tasks:
-            - name: flat-task
-              run: echo from-flat
-        """
+                - name: flat-task
+                  run: echo from-flat
+            """
         let path = dir.appendingPathComponent("config.yml")
         try yaml.write(to: path, atomically: true, encoding: .utf8)
 
@@ -208,12 +209,12 @@ struct ConfigResolutionRegressionTests {
         // "projects" is a string, not a dict — so `as? [String: Any]` fails
         // and it falls through to flat parsing
         let yaml = """
-        projects: "not a dict"
-        pre-commit:
-          tasks:
-            - name: flat-task
-              run: echo flat
-        """
+            projects: "not a dict"
+            pre-commit:
+              tasks:
+                - name: flat-task
+                  run: echo flat
+            """
         let path = dir.appendingPathComponent("config.yml")
         try yaml.write(to: path, atomically: true, encoding: .utf8)
 
@@ -363,17 +364,17 @@ struct ConfigResolutionRegressionTests {
         defer { try? FileManager.default.removeItem(at: dir) }
 
         let yaml = """
-        pre-commit:
-          tasks:
-            - name: compat-check
-              run: echo compat
-        pre-push:
-          reject-trailers:
-            - "WIP"
-          tasks:
-            - name: changelog
-              run: scripts/changelog.sh
-        """
+            pre-commit:
+              tasks:
+                - name: compat-check
+                  run: echo compat
+            pre-push:
+              reject-trailers:
+                - "WIP"
+              tasks:
+                - name: changelog
+                  run: scripts/changelog.sh
+            """
         try yaml.write(
             to: dir.appendingPathComponent(".project-hooks.yml"),
             atomically: true,
@@ -410,15 +411,15 @@ struct ConfigResolutionRegressionTests {
         let projectConfig: [String: Any] = [
             "pre-commit": [
                 "tasks": [
-                    ["name": "format", "run": "swift-format .", "on-files": ["*.swift"], "timeout": 90],
-                ],
+                    ["name": "format", "run": "swift-format .", "on-files": ["*.swift"], "timeout": 90]
+                ]
             ],
             "pre-push": [
                 "commit-message": ["pattern": "^TICKET-\\d+", "error": "Need ticket"],
                 "reject-trailers": ["Co-authored-by"],
                 "test-override": ["type": "swift"],
                 "tasks": [
-                    ["name": "docs", "run": "scripts/docs.sh"],
+                    ["name": "docs", "run": "scripts/docs.sh"]
                 ],
             ],
         ]
@@ -449,8 +450,8 @@ struct ConfigResolutionRegressionTests {
                 "tasks": [
                     ["name": "gen", "run": "swiftgen", "restage": true],
                     ["name": "assets", "run": "gen-assets", "restage": ["Generated/Assets.swift"]],
-                ],
-            ],
+                ]
+            ]
         ]
 
         let result = try HooksConfig.parseProjectsList(
@@ -469,8 +470,8 @@ struct ConfigResolutionRegressionTests {
                 "tasks": [
                     ["name": "lint", "run": "swiftlint"],
                     ["name": "format", "run": "swift-format", "after": "lint"],
-                ],
-            ],
+                ]
+            ]
         ]
 
         let result = try HooksConfig.parseProjectsList(
@@ -490,11 +491,11 @@ struct ConfigResolutionRegressionTests {
 
         // Create local config with only pre-commit
         let localYaml = """
-        pre-commit:
-          tasks:
-            - name: local-only
-              run: echo local
-        """
+            pre-commit:
+              tasks:
+                - name: local-only
+                  run: echo local
+            """
         try localYaml.write(
             to: dir.appendingPathComponent(".project-hooks.yml"),
             atomically: true,
@@ -525,9 +526,10 @@ struct ConfigResolutionRegressionTests {
 
     @Test
     func `ResolvedConfig equatable compares config content`() {
-        let configA = HooksConfig(preCommit: .init(tasks: [
-            .init(name: "a", run: "echo a"),
-        ]))
+        let configA = HooksConfig(
+            preCommit: .init(tasks: [
+                .init(name: "a", run: "echo a")
+            ]))
         let configB = HooksConfig()
 
         let resolved1 = ResolvedConfig(config: configA, source: .local)
@@ -602,10 +604,10 @@ struct ConfigResolutionRegressionTests {
 
         // Duplicate keys with conflicting types triggers a Yams error
         let badYaml = """
-        pre-commit:
-          tasks:
-        \t- broken indent with tab
-        """
+            pre-commit:
+              tasks:
+            \t- broken indent with tab
+            """
         try badYaml.write(
             to: dir.appendingPathComponent(".project-hooks.yml"),
             atomically: true,
@@ -623,10 +625,10 @@ struct ConfigResolutionRegressionTests {
         defer { try? FileManager.default.removeItem(at: dir) }
 
         let badYaml = """
-        pre-commit:
-          tasks:
-        \t- broken indent with tab
-        """
+            pre-commit:
+              tasks:
+            \t- broken indent with tab
+            """
         try badYaml.write(
             to: dir.appendingPathComponent(".project-hooks.yml"),
             atomically: true,

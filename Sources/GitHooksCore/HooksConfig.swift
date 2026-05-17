@@ -3,6 +3,7 @@ import Foundation
 import Yams
 
 /// Configuration loaded from `.project-hooks.yml` in the repo root.
+///
 /// When absent, all fields default to nil/empty — the hooks engine runs
 /// with auto-detection only (linting + test targeting, no custom tasks).
 public struct HooksConfig: Equatable {
@@ -98,7 +99,9 @@ public struct HooksConfig: Equatable {
     public struct CommitMessageConfig: Equatable {
         public let pattern: String
         public let error: String
-        /// Optional baseline ref (e.g. "origin/develop"). When set, commit-message validation
+        /// Optional baseline ref (e.g.
+        ///
+        /// "origin/develop"). When set, commit-message validation
         /// only checks commits in the push range that are NOT reachable from `base`. This
         /// avoids re-validating upstream commits that a rebased branch inherits but did not author.
         public let base: String?
@@ -159,7 +162,9 @@ public struct HooksConfig: Equatable {
     }
 
     public struct WorkScopeConfig: Equatable {
-        /// Integration branch used as the baseline (e.g. "origin/develop").
+        /// Integration branch used as the baseline (e.g.
+        ///
+        /// "origin/develop").
         /// The push range becomes merge-base(HEAD, base)..HEAD.
         public let base: String
         public let walk: WalkStrategy
@@ -179,6 +184,7 @@ public struct HooksConfig: Equatable {
     // MARK: - PR size metric
 
     /// Threshold and weight configuration for the PR-size cognitive-load check.
+    ///
     /// See `PRSizeMetric` for the formula and the empirical research the defaults
     /// are calibrated against.
     public struct PRSizeConfig: Equatable {
@@ -189,7 +195,9 @@ public struct HooksConfig: Equatable {
             case fail
         }
 
-        /// Built-in test-file patterns used when `testPatterns` is nil (i.e. the
+        /// Built-in test-file patterns used when `testPatterns` is nil (i.e.
+        ///
+        /// the
         /// user didn't specify the key). An explicit empty list disables test
         /// classification entirely — every changed file then counts as production.
         public static let defaultTestPatterns: [String] = [
@@ -221,7 +229,9 @@ public struct HooksConfig: Equatable {
         public let scatterWeight: Double
         public let testCompensation: Double
         public let exclude: [String]
-        /// When nil, `defaultTestPatterns` is used. An explicit empty list keeps
+        /// When nil, `defaultTestPatterns` is used.
+        ///
+        /// An explicit empty list keeps
         /// all files as production code (useful for repos with no test directory).
         public let testPatterns: [String]?
 
@@ -271,7 +281,9 @@ public struct HooksConfig: Equatable {
         public let testPlan: String?
         public let destination: String?
         public let broadImpactPaths: [String]?
-        /// gradle-only: a specific gradle task (or task path) to run. When nil, runs `test`.
+        /// gradle-only: a specific gradle task (or task path) to run.
+        ///
+        /// When nil, runs `test`.
         /// Useful to scope away from the full multi-flavor matrix that bare `gradle test` triggers.
         public let task: String?
         /// Free-form arguments appended to the constructed test command, regardless of runner.
@@ -281,7 +293,9 @@ public struct HooksConfig: Equatable {
         /// - swift: e.g. `--filter SomeTests`
         /// Args are passed through verbatim — quoting/escaping is the caller's responsibility.
         public let extraArgs: [String]?
-        /// When true, the test stage is skipped entirely. Useful when the test action runs
+        /// When true, the test stage is skipped entirely.
+        ///
+        /// Useful when the test action runs
         /// via `pre-push.tasks[]` (e.g. nested SwiftPM packages under an app project) or
         /// when the project has no scheme-level test bundles to run. `type` becomes
         /// optional when skipping.
@@ -336,12 +350,12 @@ public struct ResolvedConfig: Equatable {
     /// Human-readable description of the config source for CLI output.
     public var sourceDescription: String {
         switch source {
-        case .local:
-            ".project-hooks.yml"
-        case .xdgConfig:
-            "~/.config/project-hooks/config.yml"
-        case .home:
-            "~/.project-hooks.yml"
+            case .local:
+                ".project-hooks.yml"
+            case .xdgConfig:
+                "~/.config/project-hooks/config.yml"
+            case .home:
+                "~/.project-hooks.yml"
         }
     }
 }
@@ -351,7 +365,9 @@ public struct ResolvedConfig: Equatable {
 extension HooksConfig {
     public static let configFileName = ".project-hooks.yml"
 
-    /// Load config from repo root. Returns nil if no config file exists.
+    /// Load config from repo root.
+    ///
+    /// Returns nil if no config file exists.
     /// Throws if the file exists but is malformed.
     ///
     /// This method checks three locations in precedence order (first match wins):
@@ -362,7 +378,9 @@ extension HooksConfig {
         try resolve(repoRoot: repoRoot)?.config
     }
 
-    /// Resolve config with source information. Returns nil if no config is found
+    /// Resolve config with source information.
+    ///
+    /// Returns nil if no config is found
     /// in any of the checked locations.
     ///
     /// Precedence (first match wins, replace semantics — no merging):
@@ -407,6 +425,7 @@ extension HooksConfig {
     }
 
     /// Load a user-level config file, dynamically detecting flat vs projects-list format.
+    ///
     /// Returns nil if the file does not exist or if it's a projects-list config with no
     /// matching pattern for the given repo root.
     static func loadUserConfig(atPath path: String, repoRoot: String) throws -> HooksConfig? {
@@ -429,6 +448,7 @@ extension HooksConfig {
     }
 
     /// Parse a projects-list config and return the config for the first matching pattern.
+    ///
     /// Returns nil if no pattern matches the repo root.
     static func parseProjectsList(
         _ projects: [String: Any],
@@ -513,16 +533,18 @@ extension HooksConfig {
 
     private static func parseCommitMessage(_ dict: [String: Any]?) -> CommitMessageConfig? {
         guard let dict,
-              let pattern = dict["pattern"] as? String,
-              let error = dict["error"] as? String else { return nil }
+            let pattern = dict["pattern"] as? String,
+            let error = dict["error"] as? String
+        else { return nil }
         let base = (dict["base"] as? String).flatMap { $0.isEmpty ? nil : $0 }
         return CommitMessageConfig(pattern: pattern, error: error, base: base)
     }
 
     private static func parseBranchName(_ dict: [String: Any]?) -> BranchNameConfig? {
         guard let dict,
-              let pattern = dict["pattern"] as? String,
-              let error = dict["error"] as? String else { return nil }
+            let pattern = dict["pattern"] as? String,
+            let error = dict["error"] as? String
+        else { return nil }
         let skip = dict["skip"] as? [String] ?? []
         return BranchNameConfig(pattern: pattern, error: error, skip: skip)
     }
@@ -551,8 +573,9 @@ extension HooksConfig {
 
     private static func parseCommitFilter(_ dict: [String: Any]?) -> CommitFilterConfig? {
         guard let dict,
-              let branchPattern = dict["branch-pattern"] as? String,
-              let commitPattern = dict["commit-pattern"] as? String else { return nil }
+            let branchPattern = dict["branch-pattern"] as? String,
+            let commitPattern = dict["commit-pattern"] as? String
+        else { return nil }
 
         let onMismatch: MismatchAction
         if let value = dict["on-mismatch"] as? String {
@@ -608,9 +631,11 @@ extension HooksConfig {
         let maxScatter = readDouble(dict, "max-scatter", default: defaults.maxScatter)
         let maxCognitive = readDouble(dict, "max-cognitive-score", default: defaults.maxCognitiveScore)
         let volumeWeight = readDouble(dict, "volume-weight", default: defaults.volumeWeight) ?? defaults.volumeWeight
-        let scatterWeight = readDouble(dict, "scatter-weight", default: defaults.scatterWeight)
+        let scatterWeight =
+            readDouble(dict, "scatter-weight", default: defaults.scatterWeight)
             ?? defaults.scatterWeight
-        let testCompensation = readDouble(dict, "test-compensation", default: defaults.testCompensation)
+        let testCompensation =
+            readDouble(dict, "test-compensation", default: defaults.testCompensation)
             ?? defaults.testCompensation
         let exclude = dict["exclude"] as? [String] ?? []
         // Distinguish "key absent" from "explicit empty list": the latter disables defaults.
@@ -631,7 +656,8 @@ extension HooksConfig {
         )
     }
 
-    /// Read an optional int with tri-state semantics: missing key falls back to
+    /// Read an optional int with tri-state semantics: missing key falls back to.
+    ///
     /// `default`, an explicit YAML null returns nil, a parseable number is returned.
     /// Unparseable values fall back to `default` so a typo doesn't silently disable.
     private static func readInt(_ dict: [String: Any], _ key: String, default fallback: Int?) -> Int? {
@@ -690,23 +716,25 @@ extension HooksConfig {
         guard let array else { return [] }
         return array.compactMap { dict -> CustomTask? in
             guard let name = dict["name"] as? String,
-                  let run = dict["run"] as? String else {
+                let run = dict["run"] as? String
+            else {
                 let keys = dict.keys.sorted().joined(separator: ", ")
                 print("[WARN] Skipping malformed task (keys: \(keys)). Required: name, run.")
                 return nil
             }
 
-            let restage: RestageConfig? = if let val = dict["restage"] {
-                if let flag = val as? Bool, flag {
-                    .matchedFiles
-                } else if let paths = val as? [String] {
-                    .paths(paths)
+            let restage: RestageConfig? =
+                if let val = dict["restage"] {
+                    if let flag = val as? Bool, flag {
+                        .matchedFiles
+                    } else if let paths = val as? [String] {
+                        .paths(paths)
+                    } else {
+                        nil
+                    }
                 } else {
                     nil
                 }
-            } else {
-                nil
-            }
 
             return CustomTask(
                 name: name,

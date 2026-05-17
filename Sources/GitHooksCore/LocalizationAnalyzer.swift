@@ -1,6 +1,7 @@
 import Foundation
 
-/// Static analyser that flags SwiftUI string-literal call sites missing
+/// Static analyser that flags SwiftUI string-literal call sites missing.
+///
 /// a `comment:` argument. Designed for the pre-commit hook: scans
 /// staged `.swift` files, returns a list of issues for the runner to
 /// surface and block on.
@@ -19,10 +20,10 @@ public struct LocalizationAnalyzer: Sendable {
         }
 
         public let file: URL
-        public let line: Int // 1-indexed
-        public let column: Int // 1-indexed, byte offset
+        public let line: Int  // 1-indexed
+        public let column: Int  // 1-indexed, byte offset
         public let snippet: String
-        public let api: String // e.g. "Text", "Button"
+        public let api: String  // e.g. "Text", "Button"
         public let kind: Kind
 
         public init(file: URL, line: Int, column: Int, snippet: String, api: String, kind: Kind) {
@@ -61,7 +62,8 @@ public struct LocalizationAnalyzer: Sendable {
 
     // MARK: - Patterns
 
-    /// SwiftUI call sites that take a `LocalizedStringKey` or
+    /// SwiftUI call sites that take a `LocalizedStringKey` or.
+    ///
     /// `LocalizedStringResource` as their first positional argument.
     /// Each entry is `(label, regex)` — the regex must match the
     /// call-site head ending right after `"…"` (without `comment:`).
@@ -107,7 +109,8 @@ public struct LocalizationAnalyzer: Sendable {
         ("String(localized:)", #"\bString\(\s*localized:\s*"([^"]+)"\s*\)"#),
     ]
 
-    /// If a flagged line contains any of these substrings, treat as
+    /// If a flagged line contains any of these substrings, treat as.
+    ///
     /// already-localized / verbatim / debug-only and skip. Note:
     /// `String(localized:` is intentionally NOT in this list — we
     /// want to detect missing-comment cases of that API too — so
@@ -146,7 +149,8 @@ public struct LocalizationAnalyzer: Sendable {
 
     // MARK: - Public API
 
-    /// Walk the configured roots, scan every `.swift` file, return all
+    /// Walk the configured roots, scan every `.swift` file, return all.
+    ///
     /// detected issues. Files listed in `excludedFilenameSuffixes`
     /// (defaults to preview files) are skipped. Returns an empty
     /// array when no issues are found.
@@ -161,7 +165,9 @@ public struct LocalizationAnalyzer: Sendable {
         return issues
     }
 
-    /// Scan a single file. Public to allow incremental scans (e.g.,
+    /// Scan a single file.
+    ///
+    /// Public to allow incremental scans (e.g.,
     /// the staged-files set inside a pre-commit hook).
     public func analyze(file: URL) throws -> [Issue] {
         let source = try String(contentsOf: file, encoding: .utf8)
@@ -171,8 +177,8 @@ public struct LocalizationAnalyzer: Sendable {
     /// Pure-string variant for tests and pre-staged-content scans.
     public func analyze(file: URL, source: String) -> [Issue] {
         var issues: [Issue] = []
-        var previewDepth = 0 // open braces inside the #Preview block
-        var awaitingPreviewOpen = false // saw #Preview but no `{` yet
+        var previewDepth = 0  // open braces inside the #Preview block
+        var awaitingPreviewOpen = false  // saw #Preview but no `{` yet
         let lines = source.split(separator: "\n", omittingEmptySubsequences: false)
 
         for (index, raw) in lines.enumerated() {
@@ -212,7 +218,7 @@ public struct LocalizationAnalyzer: Sendable {
 
             for (api, pattern) in Self.apis {
                 guard let regex = try? NSRegularExpression(pattern: pattern) else { continue }
-                let range = NSRange(line.startIndex ..< line.endIndex, in: line)
+                let range = NSRange(line.startIndex..<line.endIndex, in: line)
                 regex.enumerateMatches(in: line, options: [], range: range) { match, _, _ in
                     guard let match, match.numberOfRanges > 1 else { return }
                     guard let snippetRange = Range(match.range(at: 1), in: line) else { return }

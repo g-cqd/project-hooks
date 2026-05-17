@@ -3,6 +3,7 @@ import Foundation
 /// Matches files against glob-like patterns (simple suffix/prefix matching).
 public enum FileGlobMatcher {
     /// Check if a file path matches any of the given glob patterns.
+    ///
     /// Supports: `*.ext`, `path/*`, `*.lproj/*`, exact matches.
     public static func matches(_ filePath: String, patterns: [String]) -> Bool {
         patterns.contains { matchesSingle(filePath, pattern: $0) }
@@ -42,6 +43,7 @@ public enum FileGlobMatcher {
 /// Orders custom tasks respecting `after` dependencies.
 public enum TaskDependencyResolver {
     /// Sort tasks so that tasks with `after` dependencies come after their dependency.
+    ///
     /// Returns nil if there's a circular dependency.
     public static func resolve(_ tasks: [HooksConfig.CustomTask]) -> [HooksConfig.CustomTask]? {
         var resolved: [HooksConfig.CustomTask] = []

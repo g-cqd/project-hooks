@@ -96,13 +96,14 @@ public enum HookLogic {
             let name = target["name"] as? String
             let identifier = target["identifier"] as? String
 
-            let candidate: String? = if let name, !name.isEmpty {
-                name
-            } else if let identifier, identifier.hasSuffix("Tests") {
-                identifier
-            } else {
-                nil
-            }
+            let candidate: String? =
+                if let name, !name.isEmpty {
+                    name
+                } else if let identifier, identifier.hasSuffix("Tests") {
+                    identifier
+                } else {
+                    nil
+                }
 
             guard let candidate else { continue }
             if seen.insert(candidate).inserted {
@@ -136,6 +137,7 @@ public enum HookLogic {
     }
 
     /// Select which test bundles to run based on changed files.
+    ///
     /// Maps each file's top-level directory to a bundle name (appending "Tests" if needed).
     public static func selectBundles(changedFiles: [String], availableBundles: [String]) -> [String] {
         let available = Set(availableBundles)

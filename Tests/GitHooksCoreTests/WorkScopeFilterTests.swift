@@ -121,7 +121,7 @@ struct WorkScopeFilterTests {
         // Body mentions another ticket, but title doesn't.
         let result = WorkScopeFilter.filter(
             commits: [
-                Self.commit("a", "MAIN-12345 mine\n\nRelated: MAIN-99999"),
+                Self.commit("a", "MAIN-12345 mine\n\nRelated: MAIN-99999")
             ],
             branchName: "feature/ios/MAIN-12345-blah",
             config: Self.config(),

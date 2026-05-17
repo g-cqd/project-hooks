@@ -36,7 +36,9 @@ import Foundation
 /// Every weight and threshold is tunable through `pre-push.pr-size` in the
 /// project configuration; the defaults target a small-to-medium product team.
 public enum PRSizeMetric {
-    /// Hardcoded band boundaries derived from the literature above. The
+    /// Hardcoded band boundaries derived from the literature above.
+    ///
+    /// The
     /// configurable `max-cognitive-score` threshold determines the *block*
     /// behavior; bands are purely informational for the report.
     public enum Band: String, Equatable, Sendable {
@@ -51,10 +53,10 @@ public enum PRSizeMetric {
 
         public var label: String {
             switch self {
-            case .small: "Small"
-            case .medium: "Medium"
-            case .large: "Large"
-            case .oversized: "Oversized"
+                case .small: "Small"
+                case .medium: "Medium"
+                case .large: "Large"
+                case .oversized: "Oversized"
             }
         }
     }
@@ -147,6 +149,7 @@ public enum PRSizeMetric {
     }
 
     /// Compute the score and any threshold violations for `stats` under `config`.
+    ///
     /// Excluded files are dropped before any aggregation. Test files contribute
     /// only to the compensation factor, never to volume or scatter.
     public static func compute(
@@ -184,7 +187,8 @@ public enum PRSizeMetric {
             weight: config.scatterWeight,
         )
 
-        let testRatio = overallTotal == 0
+        let testRatio =
+            overallTotal == 0
             ? 0.0
             : Double(testAdditions + testDeletions) / Double(overallTotal)
         let cap = max(0.0, min(config.testCompensation, 1.0))
@@ -211,7 +215,9 @@ public enum PRSizeMetric {
         return Result(score: score, violations: violations(for: score, config: config, scatter: scatter))
     }
 
-    /// Parse the output of `git diff --no-renames --numstat -z REF..REF`. Records are
+    /// Parse the output of `git diff --no-renames --numstat -z REF..REF`.
+    ///
+    /// Records are
     /// `<added>\t<deleted>\t<path>` separated by NUL. Binary files report `-\t-\t<path>`
     /// and are surfaced with `isBinary = true` and zero line counts.
     public static func parseNumstatZ(_ data: Data) -> [FileStat] {
@@ -223,7 +229,9 @@ public enum PRSizeMetric {
         return stats
     }
 
-    /// Parse newline-separated numstat output (no `-z`). Mainly useful for tests.
+    /// Parse newline-separated numstat output (no `-z`).
+    ///
+    /// Mainly useful for tests.
     public static func parseNumstat(_ text: String) -> [FileStat] {
         var stats: [FileStat] = []
         for line in text.split(whereSeparator: \.isNewline) {
@@ -282,49 +290,54 @@ public enum PRSizeMetric {
         var out: [Violation] = []
 
         if let limit = config.maxAdditions, limit > 0, score.additions > limit {
-            out.append(Violation(
-                metric: "additions",
-                value: Double(score.additions),
-                threshold: Double(limit),
-                message: "Added \(score.additions) non-test lines (limit: \(limit)).",
-            ))
+            out.append(
+                Violation(
+                    metric: "additions",
+                    value: Double(score.additions),
+                    threshold: Double(limit),
+                    message: "Added \(score.additions) non-test lines (limit: \(limit)).",
+                ))
         }
         if let limit = config.maxDeletions, limit > 0, score.deletions > limit {
-            out.append(Violation(
-                metric: "deletions",
-                value: Double(score.deletions),
-                threshold: Double(limit),
-                message: "Deleted \(score.deletions) non-test lines (limit: \(limit)).",
-            ))
+            out.append(
+                Violation(
+                    metric: "deletions",
+                    value: Double(score.deletions),
+                    threshold: Double(limit),
+                    message: "Deleted \(score.deletions) non-test lines (limit: \(limit)).",
+                ))
         }
         if let limit = config.maxFiles, limit > 0, score.files > limit {
-            out.append(Violation(
-                metric: "files",
-                value: Double(score.files),
-                threshold: Double(limit),
-                message: "Touched \(score.files) non-test files (limit: \(limit)).",
-            ))
+            out.append(
+                Violation(
+                    metric: "files",
+                    value: Double(score.files),
+                    threshold: Double(limit),
+                    message: "Touched \(score.files) non-test files (limit: \(limit)).",
+                ))
         }
         if let limit = config.maxScatter, limit > 0, scatter > limit {
-            out.append(Violation(
-                metric: "scatter",
-                value: scatter,
-                threshold: limit,
-                message: String(format: "Scatter score %.2f exceeds limit %.2f.", scatter, limit),
-            ))
+            out.append(
+                Violation(
+                    metric: "scatter",
+                    value: scatter,
+                    threshold: limit,
+                    message: String(format: "Scatter score %.2f exceeds limit %.2f.", scatter, limit),
+                ))
         }
         if let limit = config.maxCognitiveScore, limit > 0, score.cognitiveScore > limit {
-            out.append(Violation(
-                metric: "cognitive-score",
-                value: score.cognitiveScore,
-                threshold: limit,
-                message: String(
-                    format: "Cognitive load %.2f exceeds limit %.2f (band: %@).",
-                    score.cognitiveScore,
-                    limit,
-                    score.band.label,
-                ),
-            ))
+            out.append(
+                Violation(
+                    metric: "cognitive-score",
+                    value: score.cognitiveScore,
+                    threshold: limit,
+                    message: String(
+                        format: "Cognitive load %.2f exceeds limit %.2f (band: %@).",
+                        score.cognitiveScore,
+                        limit,
+                        score.band.label,
+                    ),
+                ))
         }
 
         return out
@@ -333,9 +346,9 @@ public enum PRSizeMetric {
 
 // MARK: - Small helpers
 
-private extension Array {
+extension Array {
     /// Split into `(matching, nonMatching)` in a single pass.
-    func partitioned(by predicate: (Element) -> Bool) -> (matching: [Element], nonMatching: [Element]) {
+    fileprivate func partitioned(by predicate: (Element) -> Bool) -> (matching: [Element], nonMatching: [Element]) {
         var matching: [Element] = []
         var nonMatching: [Element] = []
         for element in self {

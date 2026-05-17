@@ -21,12 +21,16 @@ public enum WorkScopeFilter {
     public struct Result: Equatable {
         public let kept: [Commit]
         public let dropped: [Commit]
-        /// Identifier extracted from the branch name. Nil when the branch didn't match
+        /// Identifier extracted from the branch name.
+        ///
+        /// Nil when the branch didn't match
         /// `branchPattern` — in that case the filter is disabled and `kept == input`.
         public let branchIdentifier: String?
         /// User-facing reason the filter was disabled, if any.
         public let disabledReason: String?
-        /// Set when the regex pattern itself was invalid. Caller should fail loudly.
+        /// Set when the regex pattern itself was invalid.
+        ///
+        /// Caller should fail loudly.
         public let configError: String?
 
         public init(
@@ -90,13 +94,15 @@ public enum WorkScopeFilter {
                 continue
             }
 
-            let title = commit.message
+            let title =
+                commit.message
                 .split(whereSeparator: \.isNewline)
                 .first
                 .map(String.init) ?? commit.message
 
             if let match = title.firstMatch(of: commitRegex),
-               String(title[match.range]) == branchID {
+                String(title[match.range]) == branchID
+            {
                 kept.append(commit)
             } else {
                 dropped.append(commit)

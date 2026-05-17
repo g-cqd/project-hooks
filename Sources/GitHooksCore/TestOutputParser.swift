@@ -50,13 +50,15 @@ public enum TestOutputParser {
     private static func extractTestName(from line: String) -> String {
         // XCTest: "Test Case '-[MyTests testFoo]' started/passed/failed"
         if let quoteStart = line.firstIndex(of: "'"),
-           let quoteEnd = line[line.index(after: quoteStart)...].firstIndex(of: "'") {
-            return String(line[quoteStart ... quoteEnd])
+            let quoteEnd = line[line.index(after: quoteStart)...].firstIndex(of: "'")
+        {
+            return String(line[quoteStart...quoteEnd])
         }
         // Swift Testing: "Test someTest() started/passed/failed after..."
         // Gradle: "com.example.MyTest > testSomething STARTED"
         // Strip status words to get a comparable identifier
-        return line
+        return
+            line
             .replacingOccurrences(of: " started.", with: "")
             .replacingOccurrences(of: " started", with: "")
             .replacingOccurrences(of: " STARTED", with: "")
@@ -80,7 +82,8 @@ public enum TestOutputParser {
             }
             // Swift Testing: "Test foo() passed/failed after X seconds."
             else if trimmed.hasPrefix("Test "), !trimmed.hasPrefix("Test run with"),
-                    trimmed.contains(" passed") || trimmed.contains(" failed") {
+                trimmed.contains(" passed") || trimmed.contains(" failed")
+            {
                 count += 1
             }
         }
@@ -98,7 +101,8 @@ public enum TestOutputParser {
             if (trimmed.contains("Test ") && trimmed.contains(" failed after"))
                 || trimmed.contains("Expectation failed")
                 || trimmed.contains("expectation failed")
-                || trimmed.contains("Issue recorded") {
+                || trimmed.contains("Issue recorded")
+            {
                 failures.append(trimmed)
             }
 
@@ -127,7 +131,8 @@ public enum TestOutputParser {
             }
     }
 
-    /// Reasons a test runner can exit with a non-zero status without an actual
+    /// Reasons a test runner can exit with a non-zero status without an actual.
+    ///
     /// test failure. The pre-push hook treats these as "nothing to run" so they
     /// don't block a push.
     public enum NoOpExitReason: Equatable, Sendable {
@@ -141,15 +146,16 @@ public enum TestOutputParser {
 
         public var humanDescription: String {
             switch self {
-            case .noTestBundlesAvailable:
-                "the scheme exposes no test bundles"
-            case .schemeTestActionNotConfigured:
-                "the scheme has no test action configured"
+                case .noTestBundlesAvailable:
+                    "the scheme exposes no test bundles"
+                case .schemeTestActionNotConfigured:
+                    "the scheme has no test action configured"
             }
         }
     }
 
-    /// Inspect test runner output and return a no-op reason if the runner exited
+    /// Inspect test runner output and return a no-op reason if the runner exited.
+    ///
     /// non-zero but didn't actually fail any test. Currently scoped to xcodebuild;
     /// `swift test` and `gradle test` propagate compile/test failures directly.
     public static func detectNoOpExitReason(lines: [String]) -> NoOpExitReason? {
@@ -168,15 +174,18 @@ public enum TestOutputParser {
     /// Extract the test run summary line (if any).
     public static func extractTestSummary(lines: [String]) -> String? {
         // Swift Testing: "Test run with 42 tests passed after 1.234 seconds."
-        let swiftTestingSummary = lines
+        let swiftTestingSummary =
+            lines
             .last { $0.contains("Test run with") && $0.contains("passed") }
 
         // XCTest: "Executed 12 tests, with 0 failures ..."
-        let xcTestSummary = lines
+        let xcTestSummary =
+            lines
             .last { $0.contains("Executed ") && $0.contains(" tests") }
 
         // Gradle: "BUILD SUCCESSFUL in Xs"
-        let gradleSummary = lines
+        let gradleSummary =
+            lines
             .last { $0.contains("BUILD SUCCESSFUL") }
 
         return swiftTestingSummary

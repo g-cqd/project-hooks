@@ -7,11 +7,11 @@ struct InstallCommand: ParsableCommand {
         commandName: "install",
         abstract: "Install git hooks into a repository or globally",
         discussion: """
-        Modes:
-          project-hooks install           Install into the current repository
-          project-hooks install --global  Install into git templates (applies to new clones)
-          project-hooks install --path /path/to/repo  Install into a specific repository
-        """,
+            Modes:
+              project-hooks install           Install into the current repository
+              project-hooks install --global  Install into git templates (applies to new clones)
+              project-hooks install --path /path/to/repo  Install into a specific repository
+            """,
     )
 
     @Flag(help: "Install into ~/.git-templates/hooks (applies to all new git clones)")
