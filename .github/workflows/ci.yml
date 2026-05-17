@@ -28,18 +28,6 @@ jobs:
         if: hashFiles('.swift-format') != ''
         run: swift format lint --strict --recursive .
 
-      - name: SwiftLint
-        if: hashFiles('.swiftlint.yml', '.swiftlint.yaml') != ''
-        run: |
-          brew install swiftlint
-          swiftlint lint --strict
-
-      - name: SwiftFormat
-        if: hashFiles('.swiftformat') != ''
-        run: |
-          brew install swiftformat
-          swiftformat --lint .
-
       # --- Build & Test ---
 
       - name: Build for testing
