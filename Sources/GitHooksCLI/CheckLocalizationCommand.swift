@@ -5,21 +5,35 @@ import GitHooksCore
 struct CheckLocalizationCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "check-localization",
-        abstract: "Find SwiftUI string literals that are missing a comment: argument",
+        abstract: "Find SwiftUI string literals and `String`-returning bodies that bypass localization",
         discussion: """
             Walks every .swift file under the supplied paths (or individual
-            .swift files when paths are passed directly) and flags Text(...),
-            Button(...), Label(...), Toggle(...), Picker(...), Section(...),
-            TextField(...), .navigationTitle(...), Stepper(...), and
-            DatePicker(...) call sites whose first string literal is not
-            accompanied by a comment: parameter.
+            .swift files when paths are passed directly) and applies two
+            independent rules:
+
+            1. Call-site rule (`missingComment`): flags Text(...),
+               Button(...), Label(...), Toggle(...), Picker(...), Section(...),
+               TextField(...), .navigationTitle(...), Stepper(...),
+               DatePicker(...), and other SwiftUI call sites whose first
+               string literal is not accompanied by a `comment:` parameter.
+
+            2. Scope rule (`bareStringReturn`): flags bare `"…"` literals
+               returned from a `String` or `LocalizedStringResource`
+               computed property, function, or single-line getter.
+               Catches the case where consumers wrap properly
+               (`Text(monitor.status.displayText)`) but the declaration
+               site returns a raw `String` literal, causing SwiftUI to
+               pick the verbatim `StringProtocol` overload and skip the
+               catalog lookup entirely. Wrap the literal in
+               `String(localized:comment:)` or change the property's
+               return type to `LocalizedStringResource`.
 
             Skip rules:
               - Lines containing `String(localized:`, `LocalizedStringKey(`,
                 `LocalizedStringResource(`, `verbatim:`, debug-only APIs
                 (Logger, print, fatalError, etc.).
               - Lines marked with the escape-hatch comment
-                (`// not-localized` by default).
+                (`// not-localized` by default) — suppresses both rules.
               - Files inside #Preview { … } blocks or whose name ends in
                 `Preview.swift` / `Previews.swift`.
 

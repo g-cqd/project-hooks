@@ -259,4 +259,297 @@ struct LocalizationAnalyzerTests {
         let issues = analyzer().analyze(file: fakeURL, source: source)
         #expect(issues.isEmpty)
     }
+
+    // MARK: - bareStringReturn detection
+    //
+    // Added after the SyncStatusMonitor.displayText regression: bare
+    // string literals returned from a `String`-typed property body
+    // bypass localization at the *declaration* site, so every
+    // `Text(monitor.status.displayText)` consumer downstream renders
+    // verbatim English. The call-site rule misses this completely.
+
+    @Test
+    func `Bare literal in single-line String case body is flagged`() {
+        let source = """
+            var displayText: String {
+                switch self {
+                case .idle: "Ready"
+                case .syncing: "Syncing..."
+                }
+            }
+            """
+        let issues = analyzer().analyze(file: fakeURL, source: source)
+        #expect(issues.count == 2)
+        #expect(issues.allSatisfy { $0.kind == .bareStringReturn })
+        #expect(issues.map(\.snippet).sorted() == ["Ready", "Syncing..."])
+    }
+
+    @Test
+    func `Bare literal in multi-line String case body is flagged`() {
+        let source = """
+            var displayText: String {
+                switch self {
+                case .idle:
+                    "Ready"
+                case .error(let message):
+                    message
+                }
+            }
+            """
+        let issues = analyzer().analyze(file: fakeURL, source: source)
+        // Only `"Ready"` is a literal — `message` is an identifier.
+        #expect(issues.count == 1)
+        #expect(issues.first?.snippet == "Ready")
+        #expect(issues.first?.kind == .bareStringReturn)
+    }
+
+    @Test
+    func `Bare return literal in String function is flagged`() {
+        let source = """
+            func describe() -> String {
+                if condition { return "Ready" }
+                return "Done"
+            }
+            """
+        let issues = analyzer().analyze(file: fakeURL, source: source)
+        #expect(issues.count == 2)
+        #expect(issues.map(\.snippet).sorted() == ["Done", "Ready"])
+        #expect(issues.allSatisfy { $0.kind == .bareStringReturn })
+    }
+
+    @Test
+    func `Single-line String property body literal is flagged`() {
+        let source = #"var label: String { "Hello" }"#
+        let issues = analyzer().analyze(file: fakeURL, source: source)
+        #expect(issues.contains { $0.kind == .bareStringReturn && $0.snippet == "Hello" })
+    }
+
+    @Test
+    func `String(localized:) inside String-returning scope passes`() {
+        // Wrapped literal — the catalog lookup happens at the
+        // `String(localized:)` call, not at the consumer. No bare
+        // literal escapes the scope.
+        let source = """
+            var displayText: String {
+                switch self {
+                case .idle:
+                    String(localized: "Ready", comment: "x")
+                }
+            }
+            """
+        let issues = analyzer().analyze(file: fakeURL, source: source)
+        #expect(issues.isEmpty)
+    }
+
+    @Test
+    func `LocalizedStringResource init inside LSR scope passes`() {
+        let source = """
+            var displayText: LocalizedStringResource {
+                switch self {
+                case .idle:
+                    LocalizedStringResource("Ready", comment: "x")
+                }
+            }
+            """
+        let issues = analyzer().analyze(file: fakeURL, source: source)
+        #expect(issues.isEmpty)
+    }
+
+    @Test
+    func `Bare literal in LocalizedStringResource-returning scope is flagged`() {
+        // LSR scope without LSR(...) constructor — the bare literal
+        // becomes the default value via ExpressibleByStringLiteral,
+        // but skips the `comment:` annotation needed for translators.
+        let source = """
+            var displayText: LocalizedStringResource {
+                switch self {
+                case .idle: "Ready"
+                }
+            }
+            """
+        let issues = analyzer().analyze(file: fakeURL, source: source)
+        #expect(issues.contains { $0.kind == .bareStringReturn && $0.snippet == "Ready" })
+    }
+
+    @Test
+    func `Bare literals outside a String-returning scope are NOT flagged by this rule`() {
+        // The literal is in a `Vehicle`-returning function body — out
+        // of scope for the new rule. (The call-site rules would
+        // separately handle anything that's user-facing here.)
+        let source = """
+            func makeVehicle() -> Vehicle {
+                let name = "Tesla"
+                return Vehicle(name: name)
+            }
+            """
+        let issues = analyzer().analyze(file: fakeURL, source: source)
+        #expect(issues.filter { $0.kind == .bareStringReturn }.isEmpty)
+    }
+
+    @Test
+    func `Bare literal returned from non-String function is NOT flagged`() {
+        let source = """
+            func count() -> Int {
+                return 42
+            }
+            func name() -> Foo {
+                return Foo(name: "Bar")
+            }
+            """
+        let issues = analyzer().analyze(file: fakeURL, source: source)
+        #expect(issues.isEmpty)
+    }
+
+    @Test
+    func `Scope ends correctly when braces close`() {
+        // After the `String`-returning property closes, we should
+        // stop flagging — the next function returns `Int` and its
+        // `return "still-a-string-but-not-in-scope"` literal would
+        // be a Swift error anyway, but the analyzer shouldn't claim
+        // it as a localization issue.
+        let source = """
+            var first: String {
+                return "Hi"
+            }
+            func unrelated() -> Int {
+                let x = "not-user-facing"
+                return 1
+            }
+            """
+        let issues = analyzer().analyze(file: fakeURL, source: source)
+        #expect(issues.count == 1)
+        #expect(issues.first?.snippet == "Hi")
+    }
+
+    @Test
+    func `Escape hatch suppresses bareStringReturn rule too`() {
+        let source = """
+            var displayText: String {
+                switch self {
+                case .idle: "Ready" // not-localized
+                }
+            }
+            """
+        let issues = analyzer().analyze(file: fakeURL, source: source)
+        #expect(issues.isEmpty)
+    }
+
+    @Test
+    func `Reproduces the SyncStatusMonitor displayText bug`() {
+        // The exact regression that escaped Ful's localization passes.
+        // Five cases, four bare literals, one identifier passthrough.
+        let source = """
+            var displayText: String {
+                switch self {
+                    case .idle:
+                        "Ready"
+                    case .syncing:
+                        "Syncing..."
+                    case .synced(let date):
+                        "Synced \\(date.formatted(.relative(presentation: .named)))"
+                    case .error(let message):
+                        message
+                    case .noAccount:
+                        "iCloud unavailable"
+                }
+            }
+            """
+        let issues = analyzer().analyze(file: fakeURL, source: source)
+            .filter { $0.kind == .bareStringReturn }
+        #expect(issues.count == 4)
+        let snippets = Set(issues.map(\.snippet))
+        #expect(snippets.contains("Ready"))
+        #expect(snippets.contains("Syncing..."))
+        #expect(snippets.contains("iCloud unavailable"))
+        // The interpolated `"Synced \(date...)"` case is flagged too —
+        // interpolation doesn't change the verbatim-display problem.
+        #expect(snippets.contains { $0.hasPrefix("Synced ") })
+    }
+
+    // MARK: - bareStringReturn skip-list (non-user-facing scopes)
+
+    @Test
+    func `Property named icon is skipped wholesale`() {
+        // SF Symbol names are the canonical example: every case body
+        // is a bare literal but none are user-facing — they feed
+        // Image(systemName:).
+        let source = """
+            var icon: String {
+                switch self {
+                case .idle: "checkmark.icloud"
+                case .syncing: "arrow.triangle.2.circlepath.icloud"
+                case .error: "exclamationmark.icloud"
+                }
+            }
+            """
+        let issues = analyzer().analyze(file: fakeURL, source: source)
+        #expect(issues.filter { $0.kind == .bareStringReturn }.isEmpty)
+    }
+
+    @Test
+    func `Property named id is skipped wholesale`() {
+        let source = """
+            var id: String {
+                switch self {
+                case .cloud: "cloud-current"
+                case .local: "local-swiftdata"
+                }
+            }
+            """
+        let issues = analyzer().analyze(file: fakeURL, source: source)
+        #expect(issues.filter { $0.kind == .bareStringReturn }.isEmpty)
+    }
+
+    @Test
+    func `Identifier-shaped literals are skipped in non-skipped scope`() {
+        // Property name is `category` — which IS skipped. But even
+        // for an unskipped name like `someText: String`, an
+        // SF-Symbol-shaped literal still gets the identifier shape
+        // filter. Verifies the shape filter works independently.
+        let source = """
+            var someText: String {
+                switch self {
+                case .a: "some.identifier.shape"
+                case .b: "actual user-facing text"
+                }
+            }
+            """
+        let issues = analyzer().analyze(file: fakeURL, source: source)
+            .filter { $0.kind == .bareStringReturn }
+        #expect(issues.count == 1)
+        #expect(issues.first?.snippet == "actual user-facing text")
+    }
+
+    @Test
+    func `Function name systemImage is skipped`() {
+        let source = """
+            func systemImage(for item: Item) -> String {
+                switch item {
+                case .a: return "star.fill"
+                case .b: return "circle"
+                }
+            }
+            """
+        let issues = analyzer().analyze(file: fakeURL, source: source)
+        #expect(issues.filter { $0.kind == .bareStringReturn }.isEmpty)
+    }
+
+    @Test
+    func `Reproduces the NetworkMonitor ConnectionType displayName bug`() {
+        let source = """
+            public var displayName: String {
+                switch self {
+                    case .wifi: "Wi-Fi"
+                    case .cellular: "Cellular"
+                    case .ethernet: "Ethernet"
+                    case .unknown: "Unknown"
+                }
+            }
+            """
+        let issues = analyzer().analyze(file: fakeURL, source: source)
+            .filter { $0.kind == .bareStringReturn }
+        #expect(issues.count == 4)
+        let snippets = Set(issues.map(\.snippet))
+        #expect(snippets == ["Wi-Fi", "Cellular", "Ethernet", "Unknown"])
+    }
 }
