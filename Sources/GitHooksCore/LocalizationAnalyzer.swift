@@ -308,13 +308,13 @@ public struct LocalizationAnalyzer: Sendable {
 
     // MARK: - bareStringReturn detection
 
-    /// Property / function names whose bodies are non-user-facing by
-    /// convention and should be skipped wholesale. SF Symbol names,
-    /// log subsystem / category strings, storage keys, and other
-    /// internal identifiers live in these slots and the cost of
-    /// hand-wrapping every one in `String(localized:)` outweighs the
-    /// signal. The list mirrors the recurring names that surfaced in
-    /// the Ful audit — extend conservatively.
+    /// Declaration names whose bodies are non-user-facing and should be skipped wholesale.
+    ///
+    /// SF Symbol names, log subsystem / category strings, storage
+    /// keys, and other internal identifiers live in these slots and
+    /// the cost of hand-wrapping every one in `String(localized:)`
+    /// outweighs the signal. The list mirrors the recurring names
+    /// that surfaced in the Ful audit — extend conservatively.
     private static let nonUserFacingDeclNames: Set<String> = [
         "icon", "iconName",
         "imageName", "systemName", "systemImage", "systemImageName",
@@ -326,10 +326,11 @@ public struct LocalizationAnalyzer: Sendable {
         "path", "filename", "fileExtension",
     ]
 
-    /// Literals that look like pure identifiers — SF Symbols
-    /// (`chart.bar.fill`), hyphenated IDs (`cloud-current`). These
-    /// are non-user-facing by shape and would be a hand-wrapping
-    /// treadmill if flagged.
+    /// Whether `literal` has the shape of a pure identifier (SF Symbol, storage key, log keyword).
+    ///
+    /// These are non-user-facing by shape (`chart.bar.fill`,
+    /// `cloud-current`) and would be a hand-wrapping treadmill if
+    /// flagged.
     ///
     /// Identifier shape:
     ///   - ASCII only (no diacritics, no CJK — those are human text)
@@ -498,11 +499,13 @@ public struct LocalizationAnalyzer: Sendable {
         return nil
     }
 
-    /// Pattern set for the `bareStringReturn` rule. Match group 1 is
-    /// the bare literal. Each pattern intentionally anchors the
-    /// literal immediately after a `:` (switch case body) or `return `
-    /// keyword, so wrapped forms like `case .foo: String(localized: "…")`
-    /// don't match (the `"…"` no longer abuts `:`).
+    /// Pattern set for the `bareStringReturn` rule.
+    ///
+    /// Match group 1 is the bare literal. Each pattern intentionally
+    /// anchors the literal immediately after a `:` (switch case body)
+    /// or `return ` keyword, so wrapped forms like
+    /// `case .foo: String(localized: "…")` don't match (the `"…"` no
+    /// longer abuts `:`).
     private static let bareReturnPatterns: [(String, String)] = [
         // `case .foo: "literal"` — single-line case body.
         // `[^:{]+?` keeps the match anchored to a single `case` head
@@ -532,9 +535,10 @@ public struct LocalizationAnalyzer: Sendable {
             if let snippet = Self.standaloneLiteral(in: trimmed),
                 !Self.looksLikeIdentifier(snippet)
             {
-                let column = (line.range(of: "\"")?.lowerBound).map {
-                    line.distance(from: line.startIndex, to: $0) + 1
-                } ?? 1
+                let column =
+                    (line.range(of: "\"")?.lowerBound).map {
+                        line.distance(from: line.startIndex, to: $0) + 1
+                    } ?? 1
                 issues.append(
                     Issue(
                         file: file,
@@ -590,9 +594,10 @@ public struct LocalizationAnalyzer: Sendable {
         }
     }
 
-    /// Returns `"String"` / `"LocalizedStringResource"` when `line`
-    /// opens a scope of either type. Detects both the property form
-    /// (`: String {`) and the function-return form (`-> String {`).
+    /// Returns the scope kind (`"String"` / `"LocalizedStringResource"`) when `line` opens one.
+    ///
+    /// Detects both the property form (`: String {`) and the
+    /// function-return form (`-> String {`).
     private static func matchedScopeKind(in line: String) -> String? {
         // Property/function header followed by `{` on the same line.
         // Most real declarations open the brace on the same line as
@@ -614,10 +619,10 @@ public struct LocalizationAnalyzer: Sendable {
         return nil
     }
 
-    /// If `text` is exactly a single `"…"` literal (possibly with a
-    /// trailing comment), return the inner snippet. Used by the
-    /// multi-line case rule, where the previous line ended on `case …:`
-    /// and the body is a literal on its own line.
+    /// Inner snippet when `text` is exactly a single `"…"` literal (with optional trailing comment).
+    ///
+    /// Used by the multi-line case rule, where the previous line
+    /// ended on `case …:` and the body is a literal on its own line.
     private static func standaloneLiteral(in text: String) -> String? {
         let stripped = strippingTrailingLineComment(from: text)
             .trimmingCharacters(in: .whitespaces)
@@ -632,9 +637,10 @@ public struct LocalizationAnalyzer: Sendable {
         return inner
     }
 
-    /// Strip a trailing `//` line comment, respecting `//` that appears
-    /// inside a string literal. Best-effort: counts unescaped `"` to
-    /// decide whether we're inside a literal at the `//` position.
+    /// Strip a trailing `//` line comment, respecting `//` that appears inside a string literal.
+    ///
+    /// Best-effort: counts unescaped `"` to decide whether we're
+    /// inside a literal at the `//` position.
     private static func strippingTrailingLineComment(from line: String) -> String {
         var inString = false
         var prevWasEscape = false
