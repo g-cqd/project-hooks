@@ -127,15 +127,15 @@ public enum TestTargetResolver {
 
     private static func buildCommand(action: BuildAction, modulePath: String, repoRoot: String) -> [String] {
         let fileManager = FileManager.default
-        let scratchDir = isolatedBuildDir(for: modulePath)
         let moduleURL = URL(fileURLWithPath: modulePath)
 
-        // Swift Package Manager
+        // Swift Package Manager. Scratch path is injected by the CLI runner via BuildIsolation
+        // so creation and cleanup live in one place.
         if fileManager.fileExists(atPath: moduleURL.appendingPathComponent("Package.swift").path) {
-            return ["swift", action.swiftVerb, "--package-path", modulePath, "--scratch-path", scratchDir]
+            return ["swift", action.swiftVerb, "--package-path", modulePath]
         }
 
-        // Xcode project
+        // Xcode project. Same isolation note as above — derivedDataPath is set at run time.
         if let contents = try? fileManager.contentsOfDirectory(atPath: modulePath),
             let xcodeproj = contents.first(where: { $0.hasSuffix(".xcodeproj") })
         {
@@ -147,34 +147,19 @@ public enum TestTargetResolver {
                 "-destination",
                 ProcessInfo.processInfo.environment["GITHOOKS_DESTINATION"]
                     ?? "generic/platform=iOS Simulator",
-                "-derivedDataPath", scratchDir,
             ]
         }
 
-        // Gradle module
+        // Gradle module. Gradle doesn't have a flag matching xcodebuild/SwiftPM cleanly, so it
+        // keeps its in-tree build/ directory; isolation here is out of scope of the runner's
+        // shared scratch logic.
         for gradleFile in ["build.gradle.kts", "build.gradle"]
         where fileManager.fileExists(atPath: moduleURL.appendingPathComponent(gradleFile).path) {
             let gradlew = findGradleWrapper(from: modulePath, repoRoot: repoRoot)
-            return [
-                gradlew, "-p", modulePath, action.gradleTask,
-                "--build-cache",
-                "-Dorg.gradle.project.buildDir=\(scratchDir)",
-            ]
+            return [gradlew, "-p", modulePath, action.gradleTask, "--build-cache"]
         }
 
         return []
-    }
-
-    /// Generate a unique, isolated build directory for a module.
-    ///
-    /// Prevents conflicts with Xcode's shared DerivedData, SPM's .build, or Gradle's build/.
-    private static func isolatedBuildDir(for modulePath: String) -> String {
-        let pid = ProcessInfo.processInfo.processIdentifier
-        let moduleName = URL(fileURLWithPath: modulePath).lastPathComponent
-        return FileManager.default.temporaryDirectory
-            .appendingPathComponent("project-hooks-build")
-            .appendingPathComponent("\(moduleName)-\(pid)")
-            .path
     }
 
     private static func makeRelativePath(from rootURL: URL, to current: URL) -> String {

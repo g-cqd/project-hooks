@@ -187,6 +187,10 @@ struct TestTargetResolverTests {
         #expect(module.buildCommand.contains("build"))
     }
 
+    // Scratch-path / derivedDataPath / gradle build-dir are injected by the CLI runner at
+    // execution time (see BuildIsolation), so the resolver-level tests assert only the bare
+    // command shape. Injection itself is covered by BuildIsolationTests.
+
     @Test
     func `build test command for SPM package`() throws {
         let root = try makeTempDir(prefix: "target")
@@ -202,7 +206,7 @@ struct TestTargetResolverTests {
         #expect(command.first == "swift")
         #expect(command.contains("test"))
         #expect(command.contains("--package-path"))
-        #expect(command.contains("--scratch-path"))
+        #expect(!command.contains("--scratch-path"))
     }
 
     @Test
@@ -219,7 +223,6 @@ struct TestTargetResolverTests {
 
         #expect(command.first == "gradle")
         #expect(command.contains("test"))
-        #expect(command.contains(where: { $0.contains("org.gradle.project.buildDir") }))
     }
 
     @Test
@@ -236,30 +239,7 @@ struct TestTargetResolverTests {
 
         #expect(command.first == "swift")
         #expect(command.contains("build"))
-        #expect(command.contains("--scratch-path"))
-    }
-
-    @Test
-    func `build commands use isolated build directories`() throws {
-        let root = try makeTempDir(prefix: "target")
-        defer { try? FileManager.default.removeItem(at: root) }
-
-        FileManager.default.createFile(
-            atPath: root.appendingPathComponent("Package.swift").path,
-            contents: nil,
-        )
-
-        let testCmd = TestTargetResolver.buildTestCommand(modulePath: root.path, repoRoot: root.path)
-        let buildCmd = TestTargetResolver.buildBuildCommand(modulePath: root.path, repoRoot: root.path)
-
-        let testScratchIdx = testCmd.firstIndex(of: "--scratch-path")
-        let buildScratchIdx = buildCmd.firstIndex(of: "--scratch-path")
-
-        let testScratch = try #require(testScratchIdx.map { testCmd[testCmd.index(after: $0)] })
-        let buildScratch = try #require(buildScratchIdx.map { buildCmd[buildCmd.index(after: $0)] })
-
-        #expect(testScratch.contains("project-hooks-build"))
-        #expect(buildScratch.contains("project-hooks-build"))
+        #expect(!command.contains("--scratch-path"))
     }
 
     @Test
