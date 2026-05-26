@@ -263,7 +263,7 @@ private func runTestOverride(_ override: HooksConfig.TestOverride, changedFiles:
     printInfo("Command: \(command.joined(separator: " "))")
     printInfo("Timeout: \(Int(testTimeout))s")
 
-    let result = try runCommand(command, currentDirectory: repoRoot, timeoutSeconds: testTimeout)
+    let result = try runIsolatedBuildCommand(command, currentDirectory: repoRoot, timeoutSeconds: testTimeout)
     let outcome = diagnoseTestResult(result, moduleName: override.type.rawValue, timeout: testTimeout)
 
     switch outcome {
@@ -366,7 +366,11 @@ private func runModuleTests(modules: [DetectedModule], repoRoot: String) throws 
         printInfo("Command: \(module.testCommand.joined(separator: " "))")
         printInfo("Timeout: \(Int(testTimeout))s")
 
-        let result = try runCommand(module.testCommand, currentDirectory: repoRoot, timeoutSeconds: testTimeout)
+        let result = try runIsolatedBuildCommand(
+            module.testCommand,
+            currentDirectory: repoRoot,
+            timeoutSeconds: testTimeout,
+        )
         let outcome = diagnoseTestResult(result, moduleName: module.name, timeout: testTimeout)
 
         switch outcome {
@@ -385,7 +389,11 @@ private func runModuleBuilds(modules: [DetectedModule], repoRoot: String) throws
         printSection("Build: \(module.name)")
         printInfo("Command: \(module.buildCommand.joined(separator: " "))")
 
-        let result = try runCommand(module.buildCommand, currentDirectory: repoRoot, timeoutSeconds: buildTimeout)
+        let result = try runIsolatedBuildCommand(
+            module.buildCommand,
+            currentDirectory: repoRoot,
+            timeoutSeconds: buildTimeout,
+        )
 
         if result.timedOut {
             printError("Build timed out after \(Int(buildTimeout))s for \(module.name).")
