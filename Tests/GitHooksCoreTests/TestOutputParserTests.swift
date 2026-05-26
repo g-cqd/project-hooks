@@ -192,6 +192,46 @@ struct TestOutputParserTests {
         #expect(TestOutputParser.extractErrors(lines: lines).isEmpty)
     }
 
+    @Test
+    func `extract errors excludes xcodebuild internal tooling noise`() {
+        // The Swift driver / xcodebuild emits these mid-build when its JSON IPC subsystem
+        // crashes. The line contains "error:" via "Underlying error:" but is not actionable —
+        // it must not pollute the actionable-errors list (or be the only thing surfaced when
+        // there's no real failure).
+        let lines = [
+            "Building for debugging...",
+            "Internal Error: DecodingError.dataCorrupted: Data was corrupted. Debug description: Corrupted JSON. Underlying error: unexpected end of file",
+            "/path/to/File.swift:10:5: error: cannot find 'foo' in scope",
+        ]
+        let errors = TestOutputParser.extractErrors(lines: lines)
+        #expect(errors.count == 1)
+        #expect(errors[0].contains("cannot find"))
+    }
+
+    // MARK: - extractInternalToolingFailures
+
+    @Test
+    func `extract internal tooling failures captures Swift driver JSON corruption`() {
+        let lines = [
+            "Building for debugging...",
+            "Internal Error: DecodingError.dataCorrupted: Data was corrupted. Debug description: Corrupted JSON. Underlying error: unexpected end of file",
+            "Internal Error: DecodingError.dataCorrupted: Data was corrupted. Debug description: Corrupted JSON. Underlying error: unexpected end of file",
+            "** TEST SUCCEEDED **",
+        ]
+        let failures = TestOutputParser.extractInternalToolingFailures(lines: lines)
+        #expect(failures.count == 2)
+        #expect(failures.allSatisfy { $0.hasPrefix("Internal Error:") })
+    }
+
+    @Test
+    func `extract internal tooling failures returns empty when none present`() {
+        let lines = [
+            "Test run with 5 tests passed.",
+            "/path/File.swift:1:1: error: real diagnostic",
+        ]
+        #expect(TestOutputParser.extractInternalToolingFailures(lines: lines).isEmpty)
+    }
+
     // MARK: - extractTestSummary
 
     @Test

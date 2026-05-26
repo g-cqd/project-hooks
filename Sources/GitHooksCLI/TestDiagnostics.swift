@@ -32,6 +32,9 @@ private func printSuccessDiagnosis(lines: [String], moduleName: String) {
 private func printFailureDiagnosis(lines: [String], moduleName: String) {
     let failingTests = TestOutputParser.extractFailingTests(lines: lines)
     let errorLines = TestOutputParser.extractErrors(lines: lines)
+    let toolingFailures = TestOutputParser.extractInternalToolingFailures(lines: lines)
+    let hasActionableFailures = !failingTests.isEmpty || !errorLines.isEmpty
+    let onlyToolingFailures = !hasActionableFailures && !toolingFailures.isEmpty
 
     printError("Tests failed (\(moduleName)).")
 
@@ -52,14 +55,32 @@ private func printFailureDiagnosis(lines: [String], moduleName: String) {
         }
     }
 
-    if failingTests.isEmpty, errorLines.isEmpty {
+    if !toolingFailures.isEmpty {
+        printInfo("Internal tooling errors (\(toolingFailures.count)) — Xcode/Swift driver IPC, not your code:")
+        for line in toolingFailures.prefix(3) {
+            print("  \(line)")
+        }
+        if toolingFailures.count > 3 {
+            print("  ... and \(toolingFailures.count - 3) more.")
+        }
+    }
+
+    if !hasActionableFailures, toolingFailures.isEmpty {
         printWarn("No specific failure lines detected. Last output:")
         for line in lines.suffix(30) {
             print("  \(line)")
         }
     }
 
-    printWarn("Push blocked. Fix failing tests and push again.")
+    if onlyToolingFailures {
+        printWarn("No test or build errors detected — only transient tooling failures.")
+        printWarn(
+            "Try: clear DerivedData, restart simulators, or retry."
+                + " If persistent, verify tests locally and push with --no-verify.",
+        )
+    } else {
+        printWarn("Push blocked. Fix failing tests and push again.")
+    }
 }
 
 /// Outcome of a test runner invocation as interpreted by the diagnosis layer.

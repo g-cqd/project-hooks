@@ -121,14 +121,32 @@ public enum TestOutputParser {
     }
 
     /// Extract error/build failure lines.
+    ///
+    /// Internal tooling errors (`Internal Error:` prefix) are excluded — see
+    /// `extractInternalToolingFailures` — because they're transient Swift driver / xcodebuild
+    /// IPC noise, not actionable test or build diagnostics, and would otherwise mask the real
+    /// failure surface (or be the *only* thing surfaced when there's no real failure).
     public static func extractErrors(lines: [String]) -> [String] {
         lines
             .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.hasPrefix("Internal Error:") }
             .filter {
                 $0.contains("error:")
                     || $0.contains("** TEST FAILED **")
                     || $0.contains("BUILD FAILED")
             }
+    }
+
+    /// Extract `Internal Error:` lines emitted by xcodebuild / the Swift driver tooling.
+    ///
+    /// Fires when the JSON IPC subsystem crashes mid-stream (e.g. `DecodingError.dataCorrupted
+    /// ... unexpected end of file`). Non-actionable from the user's code — typically a transient
+    /// race in Xcode tooling — surfaced separately so the failure diagnosis can point at the real
+    /// cause instead of pretending tests failed.
+    public static func extractInternalToolingFailures(lines: [String]) -> [String] {
+        lines
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { $0.hasPrefix("Internal Error:") }
     }
 
     /// Reasons a test runner can exit with a non-zero status without an actual.
