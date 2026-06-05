@@ -137,10 +137,10 @@ private func runCommitValidation(
         return
     }
 
-    // Commit-message validation uses the *full* push range by default — a malformed commit
-    // shouldn't sneak in just because work-scope filters it out for lint/test purposes.
-    // When `commit-message.base` is configured, exclude commits reachable from that ref so
-    // a rebased branch doesn't re-validate upstream commits it merely inherited.
+    // Commit-message validation checks the commits this push introduces — reachable from the
+    // pushed tip but not from any remote-tracking ref — so a malformed *new* commit is caught
+    // while upstream history a rebased branch merely inherited is not re-validated. An
+    // explicit `commit-message.base` narrows the set further by also excluding that ref.
     let excludeBase = try resolveCommitMessageExcludeBase(
         config: pushConfig?.commitMessage,
         repoRoot: repoRoot,
@@ -420,17 +420,11 @@ private func collectCommitSHAs(
     var shas: [String] = []
     for update in updates {
         if update.isTagUpdate || update.isDeletion { continue }
-        var args: [String] =
-            if update.isNewRemoteRef {
-                ["rev-list", update.localSHA, "--not", "--remotes=\(remoteName)"]
-            } else {
-                ["rev-list", "\(update.remoteSHA)..\(update.localSHA)"]
-            }
-        if let excludeBase {
-            // For the new-ref form, `--not` is already in effect, so a positional ref is
-            // added to the exclusion set. For the range form, prefix with `^` to exclude.
-            args.append(update.isNewRemoteRef ? excludeBase : "^\(excludeBase)")
-        }
+        let args = HookLogic.commitMessageRevListArgs(
+            localSHA: update.localSHA,
+            remoteName: remoteName,
+            excludeBase: excludeBase,
+        )
         try shas.append(contentsOf: gitLines(args, repoRoot: repoRoot))
     }
     return shas

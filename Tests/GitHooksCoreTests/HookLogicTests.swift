@@ -202,4 +202,38 @@ struct HookLogicTests {
         let selected = HookLogic.selectBundles(changedFiles: files, availableBundles: ["CoreTests"])
         #expect(selected == ["CoreTests"])
     }
+
+    // MARK: - Commit-message rev-list range
+
+    @Test
+    func `commit message rev-list args exclude remote-tracking refs`() {
+        let args = HookLogic.commitMessageRevListArgs(localSHA: "deadbeef", remoteName: "origin")
+        #expect(args == ["rev-list", "deadbeef", "--not", "--remotes=origin"])
+    }
+
+    @Test
+    func `commit message rev-list args append exclude base after --not`() {
+        let args = HookLogic.commitMessageRevListArgs(
+            localSHA: "deadbeef",
+            remoteName: "origin",
+            excludeBase: "origin/develop",
+        )
+        // excludeBase sits after `--not`, so it joins the exclusion set rather than the
+        // inclusion set — commits reachable from it are dropped from validation.
+        #expect(args == ["rev-list", "deadbeef", "--not", "--remotes=origin", "origin/develop"])
+    }
+
+    @Test
+    func `commit message rev-list args ignore empty exclude base`() {
+        let args = HookLogic.commitMessageRevListArgs(
+            localSHA: "abc", remoteName: "upstream", excludeBase: "",
+        )
+        #expect(args == ["rev-list", "abc", "--not", "--remotes=upstream"])
+    }
+
+    @Test
+    func `commit message rev-list args honor custom remote name`() {
+        let args = HookLogic.commitMessageRevListArgs(localSHA: "abc", remoteName: "fork")
+        #expect(args.contains("--remotes=fork"))
+    }
 }
