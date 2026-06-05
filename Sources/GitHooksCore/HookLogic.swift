@@ -160,4 +160,27 @@ public enum HookLogic {
 
         return availableBundles.filter { selected.contains($0) }
     }
+
+    // MARK: - Commit-message validation range
+
+    /// Build the `git rev-list` arguments for the commits a push genuinely introduces.
+    ///
+    /// The enumerated commits are reachable from `localSHA` but not from any of `remoteName`'s
+    /// tracking refs. Excluding `--remotes` — rather than only the branch's previous remote
+    /// tip — means a rebased force-push validates just the commits it authored, not the
+    /// upstream history it inherited. Validating the raw `remoteSHA..localSHA` range re-checked
+    /// the entire base-branch delta after a rebase, surfacing hundreds of inherited merge/bot
+    /// commits. A malformed *new* commit is never on a remote, so it is still caught.
+    /// `excludeBase` adds one further exclusion (e.g. an integration branch).
+    public static func commitMessageRevListArgs(
+        localSHA: String,
+        remoteName: String,
+        excludeBase: String? = nil,
+    ) -> [String] {
+        var args = ["rev-list", localSHA, "--not", "--remotes=\(remoteName)"]
+        if let excludeBase, !excludeBase.isEmpty {
+            args.append(excludeBase)
+        }
+        return args
+    }
 }
