@@ -239,7 +239,7 @@ The complete schema for `.project-hooks.yml`:
 | `name` | `string` | yes | — | Unique task identifier. Used for logging and `after` references. |
 | `run` | `string` | yes | — | Shell command executed via `/bin/bash -c`. Receives no arguments. |
 | `on-files` | `[string]` | no | all files | Simple glob-like patterns (e.g. `"*.swift"`, `"Sources/**/*.swift"`). `*` can match across path separators. |
-| `restage` | `bool \| [string]` | no | no restage | When `true`, re-stages files that matched `on-files`. When a list of paths, re-stages those specific files. Only meaningful for pre-commit. |
+| `restage` | `bool \| [string]` | no | no restage | When `true`, re-stages files that matched `on-files`. When a list of paths, re-stages those specific files. Only meaningful for pre-commit. If those files have unstaged changes before the task runs, the commit is blocked, because restaging would commit them. |
 | `after` | `string` | no | — | Name of another task that must complete before this one runs. Creates a dependency edge for topological ordering. Circular dependencies are detected and reported as errors. |
 | `timeout` | `int` | no | `120` | Maximum seconds the command may run before being terminated. |
 

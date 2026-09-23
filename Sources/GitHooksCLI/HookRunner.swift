@@ -357,6 +357,14 @@ func runCustomTasks(
         }
 
         printSection(task.name)
+        if let restage = task.restage {
+            try ensureNothingUnstaged(
+                restaging: restage,
+                task: task.name,
+                matchedFiles: matchedFiles,
+                repoRoot: repoRoot,
+            )
+        }
         let timeout = TimeInterval(task.timeout ?? 120)
 
         let result = try runCommand(
@@ -389,20 +397,47 @@ func runCustomTasks(
     }
 }
 
+/// Pathspec batches that a task's `restage` setting stages, one `git add` per batch.
+private func restagePathspecs(_ config: HooksConfig.RestageConfig, matchedFiles: [String]) -> [[String]] {
+    switch config {
+        case .matchedFiles:
+            matchedFiles.isEmpty ? [] : [matchedFiles]
+        case .paths(let paths):
+            paths.map { [$0] }
+    }
+}
+
+/// Block the commit before a restaging task runs if the files it restages have unstaged changes.
+///
+/// `git add` stages whole files, so restaging would commit hunks that the user left out of the commit, such as those
+/// that `git add -p` skipped. The check runs before the task, because the task's own edits are unstaged by design.
+/// Edits that another program makes while the task runs are still restaged.
+private func ensureNothingUnstaged(
+    restaging config: HooksConfig.RestageConfig,
+    task: String,
+    matchedFiles: [String],
+    repoRoot: String,
+) throws {
+    let pathspecs = restagePathspecs(config, matchedFiles: matchedFiles).flatMap(\.self)
+    guard !pathspecs.isEmpty else { return }
+
+    let unstaged = try gitNullSeparated(["diff", "--name-only", "-z", "--"] + pathspecs, repoRoot: repoRoot)
+    guard !unstaged.isEmpty else { return }
+
+    printError("\(task) restages files that have unstaged changes, and restaging would commit them:")
+    for file in unstaged {
+        print("  - \(file)")
+    }
+    printWarn("Commit blocked. Stage or stash those changes, then commit again.")
+    throw ExitCode(1)
+}
+
 private func restageFiles(
     _ config: HooksConfig.RestageConfig,
     matchedFiles: [String],
     repoRoot: String,
 ) throws {
-    let filesToStage: [[String]] =
-        switch config {
-            case .matchedFiles:
-                matchedFiles.isEmpty ? [] : [matchedFiles]
-            case .paths(let paths):
-                paths.map { [$0] }
-        }
-
-    for batch in filesToStage {
+    for batch in restagePathspecs(config, matchedFiles: matchedFiles) {
         let result = try runCommand(["git", "add", "--"] + batch, currentDirectory: repoRoot)
         guard result.exitCode == 0 else {
             let stderr = result.stderrText.trimmingCharacters(in: .whitespacesAndNewlines)
