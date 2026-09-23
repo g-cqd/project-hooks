@@ -79,7 +79,8 @@ struct ResultCache {
         }
     }
 
-    /// Remove the least recently used results beyond `capacity`.
+    /// Once the results exceed `capacity`, remove the least recently used ones down to nine tenths of it, so that the
+    /// next records do not each list the whole directory again.
     private func trim() throws {
         let fileManager = FileManager.default
         let names = try fileManager.contentsOfDirectory(atPath: directory)
@@ -89,7 +90,7 @@ struct ResultCache {
             let date = (try? fileManager.attributesOfItem(atPath: "\(directory)/\(name)"))?[.modificationDate] as? Date
             return (name: name, lastUse: date ?? .distantPast)
         }.sorted { $0.lastUse < $1.lastUse }
-        for result in byLastUse.prefix(names.count - capacity) {
+        for result in byLastUse.prefix(names.count - capacity * 9 / 10) {
             try? fileManager.removeItem(atPath: "\(directory)/\(result.name)")
         }
     }
