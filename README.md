@@ -56,6 +56,32 @@ Git copies the template hooks into a repository when it is created or cloned, so
 
 Without a directory, `repair` updates the current repository. Running it again changes nothing.
 
+### Trust a repository
+
+With `install --global`, every repository you clone runs project-hooks on its first commit. Git never runs hooks that a repository ships, so project-hooks does not run a repository's own code until you trust the repository:
+
+| Runs in every repository | Runs only in trusted repositories |
+|---|---|
+| Linters installed on your system, with the repository's lint configuration | Custom tasks, from `.project-hooks.yml` or from your user-level configuration |
+| Branch-name and commit-message checks | Builds and tests on push, auto-detected or from `test-override` |
+| | Linters that the repository builds itself (`BuildTools/.build/release/swiftlint` and `swiftformat`) |
+
+When a hook skips one of these steps, it says so and prints how to trust the repository:
+
+```bash
+project-hooks trust            # trust the current repository
+project-hooks trust --revoke   # stop trusting it
+```
+
+`trust` sets `project-hooks.trusted` in the repository's local git configuration, which a clone never copies, so a repository cannot trust itself. The key works in any git configuration scope. For example, to trust every repository under `~/Developer/mine/`:
+
+```bash
+git config --global 'includeIf.gitdir:~/Developer/mine/.path' ~/.config/git/trusted-hooks.gitconfig
+git config --file ~/.config/git/trusted-hooks.gitconfig project-hooks.trusted true
+```
+
+Trust covers the repository's future content too: once you trust a repository, a pull that changes its tasks or its build runs the new code on your next commit or push.
+
 ## Usage
 
 The tool runs automatically via git hooks. You can also invoke it directly:
@@ -89,7 +115,7 @@ User-level configs support two formats (auto-detected):
 
 See [docs/configuration.md](docs/configuration.md) for full details on user-level config and pattern matching.
 
-Custom tasks run as trusted local automation via `/bin/bash -c`. They are not sandboxed, so only use task definitions from repositories or user-level configs you trust.
+Custom tasks run via `/bin/bash -c` and are not sandboxed. They run only in repositories that you trust; see [Trust a repository](#trust-a-repository).
 
 ### Project config example
 
@@ -268,7 +294,7 @@ The same check is also available at commit time under `pre-commit.pr-size` (same
 
 1. **Detect platform** from repository root markers (`.xcodeproj`, `Package.swift`, `build.gradle`, etc.)
 2. **Collect staged files** via `git diff --cached --name-only`
-3. **Run custom tasks** in dependency order, filtering by `on-files` patterns
+3. **Run custom tasks** in dependency order, filtering by `on-files` patterns (trusted repositories only)
 4. **Discover linters** available on the system
 5. **Run linters** grouped by closest config file (e.g. closest `.swiftlint.yml`)
 
@@ -277,9 +303,9 @@ The same check is also available at commit time under `pre-commit.pr-size` (same
 1. **Parse push updates** from git's stdin protocol
 2. **Validate commit messages** against configured pattern and rejected trailers
 3. **Collect changed files** between local and remote refs
-4. **Run custom tasks** (same as pre-commit)
+4. **Run custom tasks** (same as pre-commit, trusted repositories only)
 5. **Run linters** (same as pre-commit)
-6. **Run tests** — either via `test-override` config or auto-detected per-module
+6. **Run tests** — either via `test-override` config or auto-detected per-module (trusted repositories only)
 
 ### Platform detection
 
@@ -318,6 +344,8 @@ ProjectHooks
 │   ├── ProjectDetector             # Platform detection
 │   ├── LinterDiscovery             # Linter discovery and resolution
 │   ├── HookLogic                   # Git push parsing, test bundle selection
+│   ├── HookInstaller               # Hook script generation, installation, repair
+│   ├── GitDirectoryLocator         # Finds repositories to repair
 │   ├── ConfigResolver              # Config file tree walking
 │   ├── CommitMessageValidator      # Commit message validation
 │   ├── CustomTaskRunner            # Glob matching, task dependency ordering
@@ -328,6 +356,8 @@ ProjectHooks
     ├── GitHooksCLI                  # Entry point, subcommand routing
     ├── PreCommitCommand             # pre-commit hook implementation
     ├── PrePushCommand               # pre-push hook implementation
+    ├── InstallCommand, RepairCommand # Hook installation and repair
+    ├── TrustCommand, RepositoryTrust # Per-repository trust opt-in
     ├── HookRunner                   # Process execution, git helpers
     ├── LinterRunner                 # Linter invocation
     └── TestDiagnostics              # Test failure reporting

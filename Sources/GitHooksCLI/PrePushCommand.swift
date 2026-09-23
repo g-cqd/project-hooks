@@ -19,6 +19,7 @@ struct PrePushCommand: ParsableCommand {
         let resolved = try HooksConfig.resolve(repoRoot: repoRoot)
         let config = resolved?.config
         let platform = ProjectDetector.detectPlatform(repoRoot: repoRoot)
+        let trusted = try RepositoryTrust.isTrusted(repoRoot: repoRoot)
 
         printSection("Pre-push checks")
         printInfo("Platform: \(platform.rawValue)")
@@ -62,24 +63,28 @@ struct PrePushCommand: ParsableCommand {
         )
 
         // --- Step 3: Custom pre-push tasks ---
-        try runCustomTasks(
-            config?.prePush.tasks ?? [],
-            files: changedFiles,
-            repoRoot: repoRoot,
-            blockMessage: "Push",
-        )
+        let tasks = config?.prePush.tasks ?? []
+        if trusted {
+            try runCustomTasks(tasks, files: changedFiles, repoRoot: repoRoot, blockMessage: "Push")
+        } else if !tasks.isEmpty {
+            RepositoryTrust.reportSkipped("\(tasks.count) custom task(s)")
+        }
 
         // --- Step 4: Lint ---
         let resolvedPlatform = resolveEffectivePlatform(changedFiles: changedFiles, detected: platform)
-        try runLintChecks(changedFiles: changedFiles, platform: resolvedPlatform, repoRoot: repoRoot)
+        try runLintChecks(changedFiles: changedFiles, platform: resolvedPlatform, repoRoot: repoRoot, trusted: trusted)
 
         // --- Step 5: Test + build ---
-        try runTestChecks(
-            config: config,
-            changedFiles: changedFiles,
-            platform: resolvedPlatform,
-            repoRoot: repoRoot,
-        )
+        if trusted {
+            try runTestChecks(
+                config: config,
+                changedFiles: changedFiles,
+                platform: resolvedPlatform,
+                repoRoot: repoRoot,
+            )
+        } else if hasTests(config: config, changedFiles: changedFiles, platform: resolvedPlatform, repoRoot: repoRoot) {
+            RepositoryTrust.reportSkipped("tests and builds")
+        }
 
         printOK("pre-push checks completed successfully.")
     }
@@ -191,12 +196,8 @@ private func resolveEffectivePlatform(changedFiles: [String], detected: Platform
     return effective != .unknown ? effective : detected
 }
 
-private func runLintChecks(changedFiles: [String], platform: Platform, repoRoot: String) throws {
-    let linters = LinterDiscovery.discoverLinters(
-        forPlatform: platform,
-        repoRoot: repoRoot,
-        fallbackPaths: defaultLinterFallbackPaths,
-    )
+private func runLintChecks(changedFiles: [String], platform: Platform, repoRoot: String, trusted: Bool) throws {
+    let linters = discoverLinters(platform: platform, repoRoot: repoRoot, trusted: trusted)
 
     guard !linters.isEmpty else {
         printWarn("No linters found. Skipping lint checks.")
@@ -246,6 +247,15 @@ private func runTestChecks(
     if !untestedModules.isEmpty {
         try runModuleBuilds(modules: untestedModules, repoRoot: repoRoot)
     }
+}
+
+/// Whether `runTestChecks` would run a test or build command for these changes.
+private func hasTests(config: HooksConfig?, changedFiles: [String], platform: Platform, repoRoot: String) -> Bool {
+    if let override = config?.prePush.testOverride {
+        return !override.skip
+    }
+    return !TestTargetResolver.detectModules(changedFiles: changedFiles, repoRoot: repoRoot, platform: platform)
+        .isEmpty
 }
 
 private func runTestOverride(_ override: HooksConfig.TestOverride, changedFiles: [String], repoRoot: String) throws {

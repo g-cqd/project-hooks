@@ -32,5 +32,9 @@ let package = Package(
             name: "GitHooksCoreTests",
             dependencies: ["GitHooksCore"],
         ),
+        .testTarget(
+            name: "GitHooksCLITests",
+            dependencies: ["GitHooksCLI", "GitHooksCore"],
+        ),
     ],
 )
