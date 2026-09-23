@@ -32,40 +32,11 @@ enum CommandScope {
     @TaskLocal static var removedVariables: Set<String> = []
 }
 
-func mergedEnvironment(_ overrides: [String: String]? = nil) -> [String: String] {
-    var env = ProcessInfo.processInfo.environment
-    for key in CommandScope.removedVariables {
-        env.removeValue(forKey: key)
-    }
-
-    let currentPath = EnvDiscovery.pathPreferringPackageManagers(env["PATH"] ?? "")
-    var pathEntries = currentPath.split(separator: ":").map(String.init)
-
-    // Auto-discover JDK so gradle/xcodebuild subprocesses don't trip over macOS's
-    // `/usr/bin/java` stub when the user hasn't exported JAVA_HOME themselves.
-    if let javaHome = EnvDiscovery.discoverJavaHome(currentEnv: env) {
-        env["JAVA_HOME"] = javaHome
-        let javaBin = "\(javaHome)/bin"
-        if !pathEntries.contains(javaBin) {
-            pathEntries.insert(javaBin, at: 0)
-        }
-    }
-
-    // Auto-discover Android SDK for gradle android-plugin subprocesses.
-    if let androidSdk = EnvDiscovery.discoverAndroidSdk(currentEnv: env) {
-        env["ANDROID_HOME"] = androidSdk
-        env["ANDROID_SDK_ROOT"] = androidSdk
-    }
-
-    env["PATH"] = pathEntries.joined(separator: ":")
-
-    if let overrides {
-        for (key, value) in overrides {
-            env[key] = value
-        }
-    }
-
-    return env
+/// The environment for `command`, from `ChildEnvironment.shared`.
+///
+/// It lacks the variables that the current scope removes, and applies `overrides` last.
+func mergedEnvironment(_ overrides: [String: String]? = nil, for command: [String] = []) -> [String: String] {
+    ChildEnvironment.shared.environment(for: command, removing: CommandScope.removedVariables, overrides: overrides)
 }
 
 func timeoutFromEnv(_ key: String, defaultSeconds: TimeInterval) -> TimeInterval {
@@ -201,7 +172,7 @@ func runCommand(
     let process = Process()
     process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
     process.arguments = args
-    process.environment = mergedEnvironment(environment)
+    process.environment = mergedEnvironment(environment, for: args)
     // Prevent processes (xcodebuild, gradle) from blocking on stdin reads
     process.standardInput = FileHandle.nullDevice
     if let input {
