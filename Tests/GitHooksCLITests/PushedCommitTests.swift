@@ -22,6 +22,23 @@ struct PushedCommitTests {
     }
 
     @Test
+    func `the first push of a new repository checks its first commit`() throws {
+        let repository = try ScratchRepository.make()
+        defer { repository.remove() }
+        try repository.installContentLinter()
+        try repository.write("Sources/App.swift", "let value = BAD\n")
+        try repository.git("add", "-A")
+        try repository.git("commit", "-q", "--amend", "--no-verify", "-m", "Initial commit")
+        let root = try repository.git("rev-parse", "HEAD")
+
+        let run = try repository.runPrePush(localSHA: root)
+
+        #expect(try repository.git("rev-list", "--count", "HEAD") == "1")
+        #expect(run.exitCode == 1, "\(run.output)")
+        #expect(run.output.contains("BAD content"))
+    }
+
+    @Test
     func `uncommitted changes neither block nor excuse a push`() throws {
         let repository = try ScratchRepository.make()
         defer { repository.remove() }

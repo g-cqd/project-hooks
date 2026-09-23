@@ -779,7 +779,7 @@ private func collectScopedChangedFiles(
         let args =
             commit.isMerge
             ? ["diff-tree", "--no-commit-id", "--name-only", "--diff-filter=ACMR", "-r", "-z", "-m", "-1", commit.sha]
-            : ["diff-tree", "--no-commit-id", "--name-only", "--diff-filter=ACMR", "-r", "-z", commit.sha]
+            : ["diff-tree", "--root", "--no-commit-id", "--name-only", "--diff-filter=ACMR", "-r", "-z", commit.sha]
         try files.formUnion(gitNullSeparated(args, repoRoot: repoRoot))
     }
     return files
@@ -818,7 +818,8 @@ private func collectFallbackChangedFiles(
         ) {
             try files.formUnion(
                 gitNullSeparated(
-                    ["diff-tree", "--no-commit-id", "--name-only", "--diff-filter=ACMR", "-r", "-z", rev],
+                    // Without `--root`, diff-tree lists nothing for a repository's first commit.
+                    ["diff-tree", "--root", "--no-commit-id", "--name-only", "--diff-filter=ACMR", "-r", "-z", rev],
                     repoRoot: repoRoot,
                 ))
         }
