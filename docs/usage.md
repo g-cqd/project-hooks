@@ -230,7 +230,9 @@ The tool finds module boundaries by walking up from each changed file looking fo
 - `*.xcodeproj` → Xcode project module
 - `build.gradle` / `build.gradle.kts` → Gradle module
 
-It then runs tests only for the affected modules, using isolated build directories to avoid conflicts.
+It then runs tests only for the affected modules. Each module of each repository has its own build directory in `~/Library/Caches/project-hooks/builds` (`GITHOOKS_CACHE_DIR`), apart from the repository's `.build`, Xcode's DerivedData and Gradle's `build/`. Pushes reuse it, so they rebuild only what changed, and the verification worktree has the same path on every push of a repository. When the build directories together exceed `GITHOOKS_BUILD_CACHE_LIMIT_GB` (10 GB by default), the least recently used ones are removed, except those that a run is using. Everything under the cache directory can be deleted at any time.
+
+Earlier versions built in a new directory under `$TMPDIR/project-hooks-build` for every run: 1.0 never removed them, and 1.1 removed them only when the run finished, not when it was interrupted. project-hooks no longer uses that directory, and you can delete it.
 
 ### Test override (configured)
 
@@ -246,6 +248,8 @@ If any changed file matches a `broad-impact-paths` prefix, all bundles run.
 | `GITHOOKS_BUILD_TIMEOUT_SECONDS` | `600` | Max seconds for build steps |
 | `GITHOOKS_DESTINATION` | `generic/platform=iOS Simulator` | Xcode simulator destination. Defaults to the generic form so xcodebuild picks any available simulator. |
 | `GITHOOKS_<LINTER>_TIMEOUT_SECONDS` | `120` | Per-linter timeout. Replace `<LINTER>` with the uppercase linter name (e.g. `GITHOOKS_SWIFTLINT_TIMEOUT_SECONDS`) |
+| `GITHOOKS_CACHE_DIR` | `~/Library/Caches/project-hooks` | Where build directories, verification worktrees and locks live between runs |
+| `GITHOOKS_BUILD_CACHE_LIMIT_GB` | `10` | Total size of the build directories kept between pushes |
 
 ## Timeouts and process management
 
@@ -254,6 +258,8 @@ Commands are executed with configurable timeouts. When a timeout expires:
 1. The process tree receives `SIGTERM` (graceful termination)
 2. If still running after a grace period, the process tree receives `SIGKILL`
 3. The task is reported as failed with timeout diagnostics
+
+When the hook itself receives `SIGINT` (Ctrl-C), `SIGTERM` or `SIGHUP`, it stops the running command's process tree the same way, removes its lint snapshot and verification worktree, and exits with status 128 plus the signal number.
 
 ## Exit codes
 

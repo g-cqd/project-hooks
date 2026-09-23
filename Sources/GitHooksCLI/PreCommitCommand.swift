@@ -9,6 +9,16 @@ struct PreCommitCommand: ParsableCommand {
     )
 
     mutating func run() throws {
+        Interruption.install()
+        do {
+            try runChecks()
+        } catch let interruption as Interrupted {
+            printWarn("Interrupted by signal \(interruption.signal). Stopped the running command and cleaned up.")
+            throw ExitCode(128 + interruption.signal)
+        }
+    }
+
+    private func runChecks() throws {
         let repoRoot = try gitRepoRoot()
         let resolved = try HooksConfig.resolve(repoRoot: repoRoot)
         let config = resolved?.config
