@@ -2,6 +2,8 @@ import Darwin
 import Foundation
 import Testing
 
+@testable import GitHooksCLI
+
 /// Review finding PH-7: Ctrl-C ended the hook at once, leaving its build running and its temporary checkouts behind.
 struct InterruptionTests {
     @Test
@@ -30,6 +32,39 @@ struct InterruptionTests {
         #expect(try repository.worktreePaths() == [repository.path])
         let worktrees = repository.cacheDirectory.appendingPathComponent("worktrees").path
         #expect(((try? FileManager.default.contentsOfDirectory(atPath: worktrees)) ?? []).isEmpty)
+    }
+
+    @Test
+    func `a push that waits for another run in the repository can be interrupted`() throws {
+        let repository = try ScratchRepository.make()
+        defer { repository.remove() }
+        try repository.write(".project-hooks.yml", "pre-push:\n  test-override:\n    type: gradle\n")
+        try repository.write("gradlew", "#!/bin/sh\nexit 0\n", executable: true)
+        let head = try repository.commitAll("Add a test runner")
+        try repository.trust()
+        let key = try HookCache.repositoryKey(repoRoot: repository.path)
+        let otherRun = try FileLock(path: repository.cacheDirectory.appendingPathComponent("locks/\(key).lock").path)
+        let output = Pipe()
+
+        let hook = try repository.startProjectHooks(
+            ["pre-push", "origin", "unused-url"],
+            stdin: "refs/heads/main \(head) refs/heads/main \(ScratchRepository.zeroSHA)\n",
+            output: output,
+            deadline: 60,
+        )
+        var printed = ""
+        while !printed.contains("Waiting for another project-hooks run") {
+            let chunk = output.fileHandleForReading.availableData
+            guard !chunk.isEmpty else { break }
+            printed += String(decoding: chunk, as: UTF8.self)
+        }
+        kill(hook.processIdentifier, SIGINT)
+        hook.waitUntilExit()
+        _ = consume otherRun
+
+        #expect(printed.contains("Waiting for another project-hooks run"), "\(printed)")
+        #expect(hook.terminationReason == .exit)
+        #expect(hook.terminationStatus == 128 + SIGINT)
     }
 
     @Test
