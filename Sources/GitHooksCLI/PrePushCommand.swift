@@ -15,6 +15,16 @@ struct PrePushCommand: ParsableCommand {
     var remoteURL = "unknown"
 
     mutating func run() throws {
+        Interruption.install()
+        do {
+            try runChecks()
+        } catch let interruption as Interrupted {
+            printWarn("Interrupted by signal \(interruption.signal). Stopped the running command and cleaned up.")
+            throw ExitCode(128 + interruption.signal)
+        }
+    }
+
+    private func runChecks() throws {
         let repoRoot = try gitRepoRoot()
         let resolved = try HooksConfig.resolve(repoRoot: repoRoot)
         let config = resolved?.config
@@ -56,9 +66,17 @@ struct PrePushCommand: ParsableCommand {
         )
 
         // --- Steps 3-5: Check each pushed commit as the push sends it, not the working tree ---
-        for commit in commits where !commit.files.isEmpty {
-            try check(commit, config: config, trusted: trusted, repoRoot: repoRoot)
+        let place = try trusted ? VerificationPlace(repoRoot: repoRoot) : nil
+        // The worktree and the build directories of a repository serve one run at a time.
+        let lock = try place.map { place in
+            try FileLock(path: place.lockPath) {
+                printInfo("Waiting for another project-hooks run in this repository to finish...")
+            }
         }
+        for commit in commits where !commit.files.isEmpty {
+            try check(commit, config: config, place: place, repoRoot: repoRoot)
+        }
+        _ = consume lock
 
         printOK("pre-push checks completed successfully.")
     }
@@ -73,10 +91,52 @@ private struct PushedCommit {
     var files: [String]
 }
 
+/// Where a trusted repository's pushed commits are checked out, and where their builds go.
+private struct VerificationPlace {
+    let repositoryKey: String
+    let buildCache = BuildCache.standard()
+
+    init(repoRoot: String) throws {
+        repositoryKey = try HookCache.repositoryKey(repoRoot: repoRoot)
+    }
+
+    /// The same path for every push of the repository, so that builds see the same source paths each time.
+    var worktreePath: String {
+        "\(HookCache.root)/worktrees/\(repositoryKey)"
+    }
+
+    var lockPath: String {
+        "\(HookCache.root)/locks/\(repositoryKey).lock"
+    }
+
+    /// Run `command` in `directory`, with its build output in the build directory of `module`, a path relative to the
+    /// repository root, when the tool takes one.
+    ///
+    /// Gradle keeps its own caches, and other tools have no build directory, so they run as they are.
+    func runBuilding(
+        _ command: [String],
+        module: String,
+        in directory: String,
+        timeout: TimeInterval,
+    ) throws -> CommandResult {
+        let run = { (command: [String]) throws -> CommandResult in
+            printInfo("Command: \(command.joined(separator: " "))")
+            printInfo("Timeout: \(Int(timeout))s")
+            return try runCommand(command, currentDirectory: directory, timeoutSeconds: timeout)
+        }
+        guard BuildIsolation.inject(into: command, scratchPath: "") != command else {
+            return try run(command)
+        }
+        let entry = buildCache.entry(repositoryKey: repositoryKey, module: module)
+        return try buildCache.use(entry) { try run(BuildIsolation.inject(into: command, scratchPath: entry.path)) }
+    }
+}
+
 /// Lint the commit's files from a snapshot of the commit.
 ///
-/// In a trusted repository, also run the custom tasks, the builds and the tests in a worktree at the commit.
-private func check(_ commit: PushedCommit, config: HooksConfig?, trusted: Bool, repoRoot: String) throws {
+/// In a trusted repository, which has a `place`, also run the custom tasks, the builds and the tests in a worktree at
+/// the commit.
+private func check(_ commit: PushedCommit, config: HooksConfig?, place: VerificationPlace?, repoRoot: String) throws {
     printSection("Commit \(commit.sha.prefix(10)) (\(commit.refs.joined(separator: ", ")))")
     printInfo("Changed files: \(commit.files.count)")
     for file in commit.files {
@@ -86,10 +146,10 @@ private func check(_ commit: PushedCommit, config: HooksConfig?, trusted: Bool, 
     // --- Step 3: Lint ---
     let workingTreePlatform = ProjectDetector.detectPlatform(repoRoot: repoRoot)
     let lintPlatform = resolveEffectivePlatform(changedFiles: commit.files, detected: workingTreePlatform)
-    try runLintChecks(commit: commit, platform: lintPlatform, repoRoot: repoRoot, trusted: trusted)
+    try runLintChecks(commit: commit, platform: lintPlatform, repoRoot: repoRoot, trusted: place != nil)
 
     let tasks = config?.prePush.tasks ?? []
-    guard trusted else {
+    guard let place else {
         if !tasks.isEmpty {
             RepositoryTrust.reportSkipped("\(tasks.count) custom task(s)")
         }
@@ -99,7 +159,7 @@ private func check(_ commit: PushedCommit, config: HooksConfig?, trusted: Bool, 
         return
     }
 
-    let worktree = try VerificationWorktree.create(commit: commit.sha, repoRoot: repoRoot)
+    let worktree = try VerificationWorktree.create(commit: commit.sha, repoRoot: repoRoot, path: place.worktreePath)
     defer { worktree.remove(repoRoot: repoRoot) }
     try worktree.inScope {
         // --- Step 4: Custom pre-push tasks ---
@@ -110,7 +170,13 @@ private func check(_ commit: PushedCommit, config: HooksConfig?, trusted: Bool, 
             changedFiles: commit.files,
             detected: ProjectDetector.detectPlatform(repoRoot: worktree.path),
         )
-        try runTestChecks(config: config, changedFiles: commit.files, platform: platform, repoRoot: worktree.path)
+        try runTestChecks(
+            config: config,
+            changedFiles: commit.files,
+            platform: platform,
+            repoRoot: worktree.path,
+            place: place,
+        )
     }
 }
 
@@ -245,6 +311,7 @@ private func runTestChecks(
     changedFiles: [String],
     platform: Platform,
     repoRoot: String,
+    place: VerificationPlace,
 ) throws {
     // Config-driven test override
     if let override = config?.prePush.testOverride {
@@ -253,7 +320,7 @@ private func runTestChecks(
             printInfo("Test stage disabled by .project-hooks.yml (test-override.skip: true).")
             return
         }
-        try runTestOverride(override, changedFiles: changedFiles, repoRoot: repoRoot)
+        try runTestOverride(override, changedFiles: changedFiles, repoRoot: repoRoot, place: place)
         return
     }
 
@@ -269,11 +336,11 @@ private func runTestChecks(
         return
     }
 
-    try runModuleTests(modules: modules, repoRoot: repoRoot)
+    try runModuleTests(modules: modules, repoRoot: repoRoot, place: place)
 
     let untestedModules = modules.filter(\.testCommand.isEmpty)
     if !untestedModules.isEmpty {
-        try runModuleBuilds(modules: untestedModules, repoRoot: repoRoot)
+        try runModuleBuilds(modules: untestedModules, repoRoot: repoRoot, place: place)
     }
 }
 
@@ -286,7 +353,12 @@ private func hasTests(config: HooksConfig?, changedFiles: [String], platform: Pl
         .isEmpty
 }
 
-private func runTestOverride(_ override: HooksConfig.TestOverride, changedFiles: [String], repoRoot: String) throws {
+private func runTestOverride(
+    _ override: HooksConfig.TestOverride,
+    changedFiles: [String],
+    repoRoot: String,
+    place: VerificationPlace,
+) throws {
     let testTimeout = timeoutFromEnv("GITHOOKS_TEST_TIMEOUT_SECONDS", defaultSeconds: 1200)
 
     guard var command = try buildOverrideCommand(override, changedFiles: changedFiles, repoRoot: repoRoot) else {
@@ -298,10 +370,7 @@ private func runTestOverride(_ override: HooksConfig.TestOverride, changedFiles:
     }
 
     printSection("Tests (config override: \(override.type.rawValue))")
-    printInfo("Command: \(command.joined(separator: " "))")
-    printInfo("Timeout: \(Int(testTimeout))s")
-
-    let result = try runIsolatedBuildCommand(command, currentDirectory: repoRoot, timeoutSeconds: testTimeout)
+    let result = try place.runBuilding(command, module: "test-override", in: repoRoot, timeout: testTimeout)
     let outcome = diagnoseTestResult(result, moduleName: override.type.rawValue, timeout: testTimeout)
 
     switch outcome {
@@ -396,19 +465,12 @@ private func buildXcodebuildOverride(
 
 // MARK: - Module-based test/build execution
 
-private func runModuleTests(modules: [DetectedModule], repoRoot: String) throws {
+private func runModuleTests(modules: [DetectedModule], repoRoot: String, place: VerificationPlace) throws {
     let testTimeout = timeoutFromEnv("GITHOOKS_TEST_TIMEOUT_SECONDS", defaultSeconds: 1200)
 
     for module in modules where !module.testCommand.isEmpty {
         printSection("Tests: \(module.name)")
-        printInfo("Command: \(module.testCommand.joined(separator: " "))")
-        printInfo("Timeout: \(Int(testTimeout))s")
-
-        let result = try runIsolatedBuildCommand(
-            module.testCommand,
-            currentDirectory: repoRoot,
-            timeoutSeconds: testTimeout,
-        )
+        let result = try place.runBuilding(module.testCommand, module: module.path, in: repoRoot, timeout: testTimeout)
         let outcome = diagnoseTestResult(result, moduleName: module.name, timeout: testTimeout)
 
         switch outcome {
@@ -420,18 +482,13 @@ private func runModuleTests(modules: [DetectedModule], repoRoot: String) throws 
     }
 }
 
-private func runModuleBuilds(modules: [DetectedModule], repoRoot: String) throws {
+private func runModuleBuilds(modules: [DetectedModule], repoRoot: String, place: VerificationPlace) throws {
     let buildTimeout = timeoutFromEnv("GITHOOKS_BUILD_TIMEOUT_SECONDS", defaultSeconds: 600)
 
     for module in modules where !module.buildCommand.isEmpty {
         printSection("Build: \(module.name)")
-        printInfo("Command: \(module.buildCommand.joined(separator: " "))")
-
-        let result = try runIsolatedBuildCommand(
-            module.buildCommand,
-            currentDirectory: repoRoot,
-            timeoutSeconds: buildTimeout,
-        )
+        let result = try place.runBuilding(
+            module.buildCommand, module: module.path, in: repoRoot, timeout: buildTimeout)
 
         if result.timedOut {
             printError("Build timed out after \(Int(buildTimeout))s for \(module.name).")

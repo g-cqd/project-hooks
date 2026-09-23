@@ -128,18 +128,26 @@ private func signalProcessIDs(_ processIDs: [pid_t], signal: Int32) {
     }
 }
 
-/// Wait for a process to finish, enforcing a deadline.
+/// How waiting for a command ended.
+private enum WaitOutcome {
+    case exited
+    case timedOut
+    case interrupted
+}
+
+/// Wait for a process to finish, enforcing a deadline, and stop it early if a signal interrupts the hook.
 ///
-/// Returns true if the process timed out.
-/// Attempts graceful termination before force-killing.
-private func waitForProcess(_ process: Process, deadline: Date) -> Bool {
+/// A process that runs past its deadline, or that an interruption stops, is terminated with its whole process tree:
+/// gracefully first, then forcibly.
+private func waitForProcess(_ process: Process, deadline: Date, interruptible: Bool) -> WaitOutcome {
     while process.isRunning, Date() < deadline {
+        if interruptible, Interruption.signal != nil { break }
         Thread.sleep(forTimeInterval: 0.5)
     }
 
     guard process.isRunning else {
         process.waitUntilExit()
-        return false
+        return .exited
     }
 
     let processTree = descendantProcessIDs(of: process.processIdentifier).reversed() + [process.processIdentifier]
@@ -156,7 +164,7 @@ private func waitForProcess(_ process: Process, deadline: Date) -> Bool {
     }
 
     process.waitUntilExit()
-    return true
+    return interruptible && Interruption.signal != nil ? .interrupted : .timedOut
 }
 
 /// Run a command and capture output.
@@ -169,8 +177,11 @@ private func waitForProcess(_ process: Process, deadline: Date) -> Bool {
 ///   - environment: Variables that override the computed environment.
 ///   - timeoutSeconds: How long the command may run; one hour when nil.
 ///   - input: The command's standard input. Without it, the command reads from `/dev/null`.
+///   - interruptible: Whether a signal to the hook stops the command. Cleanup commands pass false, so that they run
+///     to completion after an interruption.
 /// - Returns: The exit status and the captured output.
-/// - Throws: When the command cannot start, or its input or output files cannot be created.
+/// - Throws: `Interrupted` when a signal interrupts the hook, before or while the command runs, or an error when the
+///   command cannot start, or its input or output files cannot be created.
 @discardableResult
 func runCommand(
     _ args: [String],
@@ -178,7 +189,11 @@ func runCommand(
     environment: [String: String]? = nil,
     timeoutSeconds: TimeInterval? = nil,
     input: Data? = nil,
+    interruptible: Bool = true,
 ) throws -> CommandResult {
+    if interruptible {
+        try Interruption.check()
+    }
     let process = Process()
     process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
     process.arguments = args
@@ -225,16 +240,19 @@ func runCommand(
     if let timeoutSeconds {
         // Explicit timeout: poll with deadline
         let deadline = Date().addingTimeInterval(timeoutSeconds)
-        didTimeout = waitForProcess(process, deadline: deadline)
+        didTimeout = waitForProcess(process, deadline: deadline, interruptible: interruptible) == .timedOut
     } else {
         // No explicit timeout: block directly (no polling overhead for fast commands)
         // Safety net: 1-hour max to prevent infinite hangs
         let deadline = Date().addingTimeInterval(3600)
-        didTimeout = waitForProcess(process, deadline: deadline)
+        didTimeout = waitForProcess(process, deadline: deadline, interruptible: interruptible) == .timedOut
     }
 
     try? stdoutHandle.close()
     try? stderrHandle.close()
+    if interruptible {
+        try Interruption.check()
+    }
 
     let stdoutData = (try? Data(contentsOf: stdoutURL)) ?? Data()
     let stderrData = (try? Data(contentsOf: stderrURL)) ?? Data()

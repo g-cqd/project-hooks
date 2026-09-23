@@ -27,26 +27,44 @@ struct VerificationWorktree {
         return fallback.union(result.stdoutText.split(whereSeparator: \.isNewline).map(String.init))
     }()
 
-    /// Check out `commit` in a new detached worktree of the repository at `repoRoot`, with its submodules.
-    static func create(commit: String, repoRoot: String) throws -> VerificationWorktree {
-        let path =
-            canonicalPath(FileManager.default.temporaryDirectory.path)
-            + "/project-hooks-push-\(commit.prefix(12))-\(UUID().uuidString.prefix(8))"
+    /// Check out `commit` in a new detached worktree at `path`, with its submodules.
+    ///
+    /// A worktree that an earlier run left at `path`, for example when it was killed, is removed first. Callers keep
+    /// `path` stable for a repository, so that builds see the same source paths from one push to the next, and hold
+    /// the repository's lock while the worktree exists.
+    static func create(commit: String, repoRoot: String, path: String) throws -> VerificationWorktree {
         let worktree = VerificationWorktree(path: path, commit: commit)
-        try worktree.inScope {
-            // No hook runs for this checkout, so creating it cannot start another verification.
-            try worktree.git(
-                ["-c", "core.hooksPath=/dev/null", "worktree", "add", "--detach", "--quiet", path, commit],
-                in: repoRoot,
-            )
-            if FileManager.default.fileExists(atPath: "\(path)/.gitmodules") {
-                do {
+        if FileManager.default.fileExists(atPath: path) {
+            worktree.remove(repoRoot: repoRoot)
+        }
+        try FileManager.default.createDirectory(
+            atPath: (path as NSString).deletingLastPathComponent,
+            withIntermediateDirectories: true,
+        )
+        do {
+            try worktree.inScope {
+                // No hook runs for this checkout, so creating it cannot start another verification.
+                try worktree.git(
+                    [
+                        "-c",
+                        "core.hooksPath=/dev/null",
+                        "worktree",
+                        "add",
+                        "--detach",
+                        "--force",
+                        "--quiet",
+                        path,
+                        commit,
+                    ],
+                    in: repoRoot,
+                )
+                if FileManager.default.fileExists(atPath: "\(path)/.gitmodules") {
                     try worktree.git(["submodule", "update", "--init", "--recursive", "--quiet"], in: path)
-                } catch {
-                    worktree.remove(repoRoot: repoRoot)
-                    throw error
                 }
             }
+        } catch {
+            worktree.remove(repoRoot: repoRoot)
+            throw error
         }
         return worktree
     }
@@ -56,23 +74,31 @@ struct VerificationWorktree {
         try CommandScope.$removedVariables.withValue(Self.repositoryVariables, operation: body)
     }
 
-    /// Remove the worktree and its registration.
+    /// Remove the worktree and its registration, even after an interruption.
     ///
-    /// Removal failures are reported, not thrown, so that they cannot replace the verification's own outcome.
+    /// Failures are reported, not thrown, so that they cannot replace the verification's own outcome.
     func remove(repoRoot: String) {
         inScope {
             do {
-                try git(["worktree", "remove", "--force", "--force", path], in: repoRoot)
+                try git(["worktree", "remove", "--force", "--force", path], in: repoRoot, interruptible: false)
             } catch {
-                printWarn("Could not remove the worktree at \(path): \(error). Removing its directory instead.")
+                // Not registered, or not removable: remove the directory, then forget any registration.
                 try? FileManager.default.removeItem(atPath: path)
-                _ = try? runCommand(["git", "worktree", "prune"], currentDirectory: repoRoot)
+                _ = try? runCommand(["git", "worktree", "prune"], currentDirectory: repoRoot, interruptible: false)
+                if FileManager.default.fileExists(atPath: path) {
+                    printWarn("Could not remove the worktree at \(path): \(error)")
+                }
             }
         }
     }
 
-    private func git(_ arguments: [String], in directory: String) throws {
-        let result = try runCommand(["git"] + arguments, currentDirectory: directory, timeoutSeconds: 600)
+    private func git(_ arguments: [String], in directory: String, interruptible: Bool = true) throws {
+        let result = try runCommand(
+            ["git"] + arguments,
+            currentDirectory: directory,
+            timeoutSeconds: 600,
+            interruptible: interruptible,
+        )
         guard result.exitCode == 0 else {
             let stderr = result.stderrText.trimmingCharacters(in: .whitespacesAndNewlines)
             throw HookError.message("git \(arguments.joined(separator: " ")) failed: \(stderr)")

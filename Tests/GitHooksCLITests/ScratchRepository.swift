@@ -185,6 +185,25 @@ struct ScratchRepository {
         try runProcess([ProjectHooksBinary.path] + arguments, in: root, environment: environment, stdin: stdin)
     }
 
+    /// Start the binary in the repository without waiting for it, with `stdin` as its standard input.
+    func startProjectHooks(_ arguments: [String], stdin: String? = nil) throws -> Process {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: ProjectHooksBinary.path)
+        process.arguments = arguments
+        process.currentDirectoryURL = root
+        process.environment = environment
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = FileHandle.nullDevice
+        let input = Pipe()
+        process.standardInput = stdin == nil ? FileHandle.nullDevice : input
+        try process.run()
+        if let stdin {
+            input.fileHandleForWriting.write(Data(stdin.utf8))
+            try input.fileHandleForWriting.close()
+        }
+        return process
+    }
+
     /// Run the pre-push hook for pushing `localSHA` as a new `refs/heads/<branch>` on `origin`.
     func runPrePush(branch: String = "main", localSHA: String, remoteSHA: String = Self.zeroSHA) throws -> ProcessRun {
         try runProjectHooks(
