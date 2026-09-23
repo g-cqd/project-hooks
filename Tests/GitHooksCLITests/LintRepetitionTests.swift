@@ -78,6 +78,83 @@ struct LintRepetitionTests {
         #expect(try repository.contentLinterInputs().count == 3)
     }
 
+    @Test
+    func `changing an external SwiftLint parent reruns lint on the same tree`() throws {
+        let repository = try ScratchRepository.make()
+        defer { repository.remove() }
+        try repository.installContentLinter()
+        let parent = repository.scratch.appendingPathComponent("parent.yml")
+        try "only_rules:\n  - force_cast\n".write(to: parent, atomically: true, encoding: .utf8)
+        try repository.write(".swiftlint.yml", "parent_config: \(parent.path)\n")
+        try repository.write("Sources/App.swift", "let value = 1\n")
+        try repository.git("add", "-A")
+
+        let commit = try repository.runProjectHooks(["pre-commit"])
+        let head = try repository.commitAll("Add the app")
+        try "only_rules:\n  - force_try\n".write(to: parent, atomically: true, encoding: .utf8)
+        let push = try repository.runPrePush(localSHA: head)
+
+        #expect(commit.exitCode == 0 && push.exitCode == 0, "\(push.output)")
+        #expect(try repository.contentLinterInputs().count == 2)
+    }
+
+    @Test
+    func `a remote SwiftLint parent is never cached`() throws {
+        let repository = try ScratchRepository.make()
+        defer { repository.remove() }
+        try repository.installContentLinter()
+        try repository.write(".swiftlint.yml", "parent_config: https://example.invalid/rules.yml\n")
+        try repository.write("Sources/App.swift", "let value = 1\n")
+        try repository.git("add", "-A")
+
+        let first = try repository.runProjectHooks(["pre-commit"])
+        let second = try repository.runProjectHooks(["pre-commit"])
+
+        #expect(first.exitCode == 0 && second.exitCode == 0, "\(second.output)")
+        #expect(try repository.contentLinterInputs().count == 2)
+    }
+
+    @Test
+    func `a SwiftLint configuration symlinked outside the repository is never cached`() throws {
+        let repository = try ScratchRepository.make()
+        defer { repository.remove() }
+        try repository.installContentLinter()
+        let configuration = repository.scratch.appendingPathComponent("rules.yml")
+        try "only_rules:\n  - force_cast\n".write(to: configuration, atomically: true, encoding: .utf8)
+        try FileManager.default.removeItem(at: repository.root.appendingPathComponent(".swiftlint.yml"))
+        try FileManager.default.createSymbolicLink(
+            at: repository.root.appendingPathComponent(".swiftlint.yml"), withDestinationURL: configuration)
+        try repository.write("Sources/App.swift", "let value = 1\n")
+        try repository.git("add", "-A")
+
+        let first = try repository.runProjectHooks(["pre-commit"])
+        try "only_rules:\n  - force_try\n".write(to: configuration, atomically: true, encoding: .utf8)
+        let second = try repository.runProjectHooks(["pre-commit"])
+
+        #expect(first.exitCode == 0 && second.exitCode == 0, "\(second.output)")
+        #expect(try repository.contentLinterInputs().count == 2)
+    }
+
+    @Test
+    func `an include beyond the snapshot depth limit is never cached`() throws {
+        let repository = try ScratchRepository.make()
+        defer { repository.remove() }
+        try repository.installContentLinter()
+        try repository.write(".swiftlint.yml", "parent_config: lint/1.yml\n")
+        for level in 1...8 {
+            let parent = level == 8 ? "https://example.invalid/rules.yml" : "\(level + 1).yml"
+            try repository.write("lint/\(level).yml", "parent_config: \(parent)\n")
+        }
+        try repository.write("Sources/App.swift", "let value = 1\n")
+        try repository.git("add", "-A")
+
+        let first = try repository.runProjectHooks(["pre-commit"])
+        let second = try repository.runProjectHooks(["pre-commit"])
+
+        #expect(first.exitCode == 0 && second.exitCode == 0, "\(second.output)")
+        #expect(try repository.contentLinterInputs().count == 2)
+    }
+
     /// From the review of the fix: a version manager's shim keeps its path, size and date when the version that it
     /// runs changes.
     @Test

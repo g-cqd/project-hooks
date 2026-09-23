@@ -51,8 +51,11 @@ struct LintConfigurationTests {
     }
 
     @Test
-    func `remote SwiftLint includes are left to SwiftLint`() {
-        #expect(LintConfiguration.swiftLintReferences(in: "parent_config: https://example.com/base.yml\n").isEmpty)
+    func `remote SwiftLint includes are reported for cache decisions`() {
+        #expect(
+            LintConfiguration.swiftLintReferences(in: "parent_config: https://example.com/base.yml\n") == [
+                "https://example.com/base.yml"
+            ])
     }
 
     @Test(arguments: ["", "- not a mapping\n", "parent_config: [1, 2]\n"])
