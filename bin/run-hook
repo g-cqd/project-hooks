@@ -17,24 +17,13 @@ if [[ -z "$HOOK_NAME" ]]; then
   exit 1
 fi
 
-REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+# Only the installed binary: a path inside the repository, or on PATH, would let a
+# cloned repository choose the program that its hooks run.
+BIN="$HOME/.local/bin/project-hooks"
 
-# Look for the binary in common locations
-BIN=""
-for candidate in \
-  "${REPO_ROOT:+$REPO_ROOT/.build/release/project-hooks}" \
-  "$(dirname "$0")/../.build/release/project-hooks" \
-  "$HOME/.local/bin/project-hooks" \
-  "$(command -v project-hooks 2>/dev/null || true)"; do
-  if [[ -n "$candidate" && -x "$candidate" ]]; then
-    BIN="$candidate"
-    break
-  fi
-done
-
-if [[ -z "$BIN" ]]; then
+if [[ ! -x "$BIN" ]]; then
   echo "[ERROR] project-hooks binary not found." >&2
-  echo "[INFO] Install with: swift build -c release" >&2
+  echo "[INFO] Install it at ~/.local/bin/project-hooks." >&2
   exit 1
 fi
 

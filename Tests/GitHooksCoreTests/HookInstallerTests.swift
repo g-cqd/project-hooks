@@ -22,11 +22,52 @@ struct HookInstallerTests {
     }
 
     @Test
-    func `hook script searches for binary in standard locations`() {
+    func `hook script searches only the installed locations`() {
         let script = HookInstaller.hookScript()
-        #expect(script.contains(".build/release/project-hooks"))
         #expect(script.contains(".local/bin/project-hooks"))
-        #expect(script.contains("command -v project-hooks"))
+        #expect(!script.contains(".build/release/project-hooks"))
+        #expect(!script.contains("command -v"))
+        #expect(!script.contains("REPO_ROOT"))
+    }
+
+    @Test
+    func `hook never runs a binary that the repository ships`() throws {
+        let tmpDir = try makeTempDir(prefix: "install-shipped-binary")
+        defer { try? FileManager.default.removeItem(at: tmpDir) }
+        #expect(try runProcess("git", args: ["init", "-q", tmpDir.path], environment: hermeticEnvironment) == 0)
+
+        // A cloned repository can commit an executable wherever earlier hook scripts searched.
+        for shippedPath in [".build/release/project-hooks", "project-hooks"] {
+            try writeMarkerScript(at: tmpDir.appendingPathComponent(shippedPath), marker: "shipped-binary-ran")
+        }
+        let installed = tmpDir.appendingPathComponent("installed/project-hooks")
+        try writeMarkerScript(at: installed, marker: "installed-binary-ran")
+        _ = try HookInstaller.installHooks(
+            to: tmpDir.appendingPathComponent(".git/hooks").path,
+            binaryPath: installed.path,
+        )
+
+        let exitCode = try runHook("pre-commit", in: tmpDir)
+
+        #expect(exitCode == 0)
+        #expect(FileManager.default.fileExists(atPath: tmpDir.appendingPathComponent("installed-binary-ran").path))
+        #expect(!FileManager.default.fileExists(atPath: tmpDir.appendingPathComponent("shipped-binary-ran").path))
+    }
+
+    @Test
+    func `hook fails rather than search PATH when the installed binary is missing`() throws {
+        let tmpDir = try makeTempDir(prefix: "install-missing-binary")
+        defer { try? FileManager.default.removeItem(at: tmpDir) }
+        #expect(try runProcess("git", args: ["init", "-q", tmpDir.path], environment: hermeticEnvironment) == 0)
+
+        try writeMarkerScript(at: tmpDir.appendingPathComponent("project-hooks"), marker: "shipped-binary-ran")
+        let missing = tmpDir.appendingPathComponent("uninstalled/project-hooks").path
+        _ = try HookInstaller.installHooks(to: tmpDir.appendingPathComponent(".git/hooks").path, binaryPath: missing)
+
+        let exitCode = try runHook("pre-commit", in: tmpDir)
+
+        #expect(exitCode == 1)
+        #expect(!FileManager.default.fileExists(atPath: tmpDir.appendingPathComponent("shipped-binary-ran").path))
     }
 
     @Test
@@ -209,14 +250,49 @@ struct HookInstallerTests {
 
 // MARK: - Test helpers
 
-private func runProcess(_ executable: String, args: [String], currentDirectory: URL? = nil) throws -> Int32 {
+/// This process's environment without the user's git configuration or any inherited `GIT_*` variable.
+private let hermeticEnvironment: [String: String] = {
+    var environment = ProcessInfo.processInfo.environment.filter { !$0.key.hasPrefix("GIT_") }
+    environment["GIT_CONFIG_GLOBAL"] = "/dev/null"
+    environment["GIT_CONFIG_NOSYSTEM"] = "1"
+    return environment
+}()
+
+private func runProcess(
+    _ executable: String,
+    args: [String],
+    currentDirectory: URL? = nil,
+    environment: [String: String]? = nil,
+) throws -> Int32 {
     let process = Process()
     process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
     process.arguments = [executable] + args
     process.currentDirectoryURL = currentDirectory
+    if let environment { process.environment = environment }
     process.standardOutput = FileHandle.nullDevice
     process.standardError = FileHandle.nullDevice
     try process.run()
     process.waitUntilExit()
     return process.terminationStatus
+}
+
+/// Run an installed hook the way git does, from the repository root, with `.` first on `PATH` and a home
+/// directory that has no project-hooks binary.
+private func runHook(_ name: String, in repository: URL) throws -> Int32 {
+    var environment = hermeticEnvironment
+    environment["PATH"] = ".:/usr/bin:/bin"
+    environment["HOME"] = repository.appendingPathComponent("empty-home").path
+    return try runProcess(
+        repository.appendingPathComponent(".git/hooks/\(name)").path,
+        args: [],
+        currentDirectory: repository,
+        environment: environment,
+    )
+}
+
+/// Write an executable that creates `marker` in its working directory when it runs.
+private func writeMarkerScript(at url: URL, marker: String) throws {
+    try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+    try "#!/bin/sh\ntouch \"$PWD/\(marker)\"\n".write(to: url, atomically: true, encoding: .utf8)
+    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: url.path)
 }
