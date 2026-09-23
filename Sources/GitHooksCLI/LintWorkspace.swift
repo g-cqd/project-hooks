@@ -8,6 +8,8 @@ struct LintWorkspace {
     let blobs: [String: String]
     /// A digest of the workspace's lint configuration files, when git provided them.
     let configurationDigest: String?
+    /// Whether the snapshot covers every SwiftLint configuration that can affect its verdict.
+    let swiftLintCacheable: Bool
 
     /// A workspace that is the working tree itself.
     init(repoRoot: String) {
@@ -15,6 +17,7 @@ struct LintWorkspace {
         self.repoRoot = repoRoot
         blobs = [:]
         configurationDigest = nil
+        swiftLintCacheable = false
     }
 
     init(snapshot: IndexSnapshot, repoRoot: String) {
@@ -22,6 +25,7 @@ struct LintWorkspace {
         self.repoRoot = repoRoot
         blobs = snapshot.blobs
         configurationDigest = snapshot.configurationDigest
+        swiftLintCacheable = snapshot.swiftLintCacheable
     }
 
     /// `text` with every spelling of `root` replaced by `repoRoot`.

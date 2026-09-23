@@ -16,6 +16,8 @@ struct IndexSnapshot {
     private(set) var blobs: [String: String] = [:]
     /// A digest of every lint configuration file in the snapshot, and of its content.
     private(set) var configurationDigest = ""
+    /// Whether every SwiftLint include is held in the snapshot and covered by its digest.
+    private(set) var swiftLintCacheable = true
     /// The environment for git commands that read the snapshot's index.
     ///
     /// Nil for the repository's own index.
@@ -121,7 +123,7 @@ struct IndexSnapshot {
     /// Copy the files that the copied SwiftLint configurations include, so that SwiftLint does not fall back to its
     /// default rules when an included configuration is missing.
     /// - Returns: The included files that the snapshot now contains.
-    private func checkOutSwiftLintIncludes(
+    private mutating func checkOutSwiftLintIncludes(
         of configurations: [String],
         index: [String: String],
         repoRoot: String,
@@ -135,29 +137,44 @@ struct IndexSnapshot {
             var included: [String] = []
             for configuration in pending {
                 let url = URL(fileURLWithPath: root).appendingPathComponent(configuration)
-                guard let yaml = try? String(contentsOf: url, encoding: .utf8) else { continue }
+                if (try? FileManager.default.destinationOfSymbolicLink(atPath: url.path)) != nil {
+                    swiftLintCacheable = false
+                }
+                guard let yaml = try? String(contentsOf: url, encoding: .utf8) else {
+                    swiftLintCacheable = false
+                    continue
+                }
                 let directory = (configuration as NSString).deletingLastPathComponent
                 for reference in LintConfiguration.swiftLintReferences(in: yaml) {
-                    guard let path = Self.repositoryPath(of: reference, from: directory),
-                        seen.insert(path).inserted
-                    else { continue }
+                    guard let path = Self.repositoryPath(of: reference, from: directory) else {
+                        swiftLintCacheable = false
+                        continue
+                    }
+                    guard seen.insert(path).inserted else { continue }
                     included.append(path)
                 }
             }
             // Only files that the index holds can be copied from it.
             let indexed = included.filter { index[$0] != nil }
-            guard !indexed.isEmpty else { break }
+            if indexed.count != included.count { swiftLintCacheable = false }
+            guard !indexed.isEmpty else {
+                pending = []
+                break
+            }
             try checkOut(indexed, repoRoot: repoRoot)
             copied += indexed
             pending = indexed
         }
+        if !pending.isEmpty { swiftLintCacheable = false }
         return copied
     }
 
     /// The repository-relative path that `reference`, relative to `directory`, designates, or nil when the reference is
     /// absolute or leaves the repository.
     static func repositoryPath(of reference: String, from directory: String) -> String? {
-        guard !reference.hasPrefix("/") else { return nil }
+        guard !reference.hasPrefix("/"), !reference.hasPrefix("~"),
+            URLComponents(string: reference)?.scheme == nil
+        else { return nil }
         var components: [Substring] = []
         for component in "\(directory)/\(reference)".split(separator: "/") {
             switch component {

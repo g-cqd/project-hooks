@@ -222,7 +222,7 @@ Files are grouped by their closest config file (walking up the directory tree). 
 
 Every group runs, even after one fails, and the hook then blocks once with the list of groups that did not pass.
 
-project-hooks remembers which files each linter passed, in `~/Library/Caches/project-hooks/lint`, keyed by the linter's binary, every lint configuration file in the repository, and the file's path and content. Pre-push therefore skips the files that the commit hook already linted, and a commit retried after a lint failure lints only the groups that failed. Changing any of those inputs lints the file again. A configuration that SwiftLint downloads, or reads from outside the repository, is not part of the key: set `GITHOOKS_NO_CACHE=1` to lint everything.
+project-hooks remembers which files each linter passed, in `~/Library/Caches/project-hooks/lint`, keyed by the linter's binary, every lint configuration file in the repository, and the file's path and content. Pre-push therefore skips the files that the commit hook already linted, and a commit retried after a lint failure lints only the groups that failed. Changing any of those inputs lints the file again. SwiftLint results are not cached when a configuration includes an external file or URL, or the snapshot cannot cover every include.
 
 ## Test targeting
 

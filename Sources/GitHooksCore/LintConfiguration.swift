@@ -9,16 +9,14 @@ public enum LintConfiguration {
         (LinterDiscovery.configCandidates + [".swift-version"]).map { URL(fileURLWithPath: $0).lastPathComponent },
     )
 
-    /// The local files that a SwiftLint configuration includes through `parent_config` and `child_config`, as written:
-    /// relative to the configuration's directory, or absolute.
+    /// The parent and child configurations that SwiftLint reads, as written.
     ///
-    /// Remote URLs are omitted, because SwiftLint downloads them.
+    /// A reference can be relative to the configuration's directory, absolute, or a remote URL.
     /// - Returns: The referenced paths, or none when `yaml` does not parse as a SwiftLint configuration.
     public static func swiftLintReferences(in yaml: String) -> [String] {
         guard let references = try? YAMLDecoder().decode(SwiftLintReferences.self, from: yaml) else { return [] }
         return [references.parentConfig, references.childConfig]
             .compactMap(\.self)
-            .filter { !$0.contains("://") }
     }
 
     private struct SwiftLintReferences: Decodable {
