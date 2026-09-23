@@ -2,8 +2,8 @@ import Foundation
 
 /// Pure helpers for routing Swift / xcodebuild build artifacts into an isolated scratch dir.
 ///
-/// The lifecycle (create + remove) lives in the CLI runner; this module only shapes the
-/// command so the logic is unit-testable without filesystem fixtures.
+/// The CLI's build cache owns the directories; this module only shapes the command, so the logic is unit-testable
+/// without filesystem fixtures.
 public enum BuildIsolation {
     /// Augment a build/test command with the tool-specific flag that redirects its
     /// intermediates into `scratchPath`.
@@ -23,9 +23,8 @@ public enum BuildIsolation {
                 }
                 return command + ["--scratch-path", scratchPath]
             default:
-                // Gradle and other tools are passed through unchanged — gradle's build dir
-                // is configured per-project via -Dorg.gradle.project.buildDir at the call
-                // site rather than via a tool-level flag, so it doesn't fit this pattern.
+                // Gradle and other tools are passed through unchanged. Gradle has no build directory flag: a
+                // `buildDir` project property would apply to every project of a multi-project build.
                 return command
         }
     }

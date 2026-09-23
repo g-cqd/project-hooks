@@ -6,11 +6,13 @@ public struct DiscoveredLinter: Equatable {
     public let executablePath: String
     public let configCandidates: [String]
     public let platform: Platform
-    /// When true, the linter only runs if a config file is found in the repo.
+    /// When true, the linter runs only on files that one of its configuration files covers.
     ///
-    /// Built-in toolchain linters (swift-format) have sensible defaults and don't require config.
+    /// Every linter that discovery returns requires one.
     public let requiresConfig: Bool
     /// When true, the linter is invoked via `swift format` subcommand instead of a standalone binary.
+    ///
+    /// Discovery never sets it: swift-format comes from `SwiftFormatResolver` as a standalone binary.
     public let usesSwiftSubcommand: Bool
     /// Where the binary came from, when discovery chose it by a rule other than `PATH` lookup.
     public let origin: String?
@@ -198,7 +200,9 @@ public enum LinterDiscovery {
                 let path = (String(data: data, encoding: .utf8) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
                 if !path.isEmpty { return path }
             }
-        } catch {}
+        } catch {
+            print("[WARN] Could not run `which \(name)` to find \(name): \(error)")
+        }
 
         // Check fallback path
         if let fallback = fallbackRelativePath {

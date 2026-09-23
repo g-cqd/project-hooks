@@ -147,7 +147,7 @@ Without a `.project-hooks.yml` file (in the repo or user directories), project-h
 - Detects your platform from repo markers
 - Discovers linters installed on your system
 - Runs discovered linters on staged/changed files
-- Auto-detects test modules and runs tests on push
+- Auto-detects test modules and runs tests on push, in repositories that you trust
 
 Configuration only adds custom tasks, commit message rules, and test runner overrides on top of this baseline.
 
