@@ -1,6 +1,6 @@
 import Foundation
 
-/// Remembers which test and build commands passed on which tree, so that pushing an identical tree again, for example
+/// Remembers which test commands passed on which tree, so that pushing an identical tree again, for example
 /// to a second remote or after rewording a commit message, does not run them again.
 ///
 /// A result applies only to the same tree, module and command, with the same tool versions and the same environment

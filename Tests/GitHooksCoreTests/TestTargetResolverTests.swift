@@ -163,7 +163,7 @@ struct TestTargetResolverTests {
     }
 
     @Test
-    func `detect modules includes both test and build commands`() throws {
+    func `detect modules includes a test command`() throws {
         let root = try makeTempDir(prefix: "target")
         defer { try? FileManager.default.removeItem(at: root) }
 
@@ -184,7 +184,6 @@ struct TestTargetResolverTests {
 
         let module = try #require(modules.first)
         #expect(module.testCommand.contains("test"))
-        #expect(module.buildCommand.contains("build"))
     }
 
     // Scratch-path / derivedDataPath / gradle build-dir are injected by the CLI runner at
@@ -223,23 +222,6 @@ struct TestTargetResolverTests {
 
         #expect(command.first == "gradle")
         #expect(command.contains("test"))
-    }
-
-    @Test
-    func `build build command for SPM package`() throws {
-        let root = try makeTempDir(prefix: "target")
-        defer { try? FileManager.default.removeItem(at: root) }
-
-        FileManager.default.createFile(
-            atPath: root.appendingPathComponent("Package.swift").path,
-            contents: nil,
-        )
-
-        let command = TestTargetResolver.buildBuildCommand(modulePath: root.path, repoRoot: root.path)
-
-        #expect(command.first == "swift")
-        #expect(command.contains("build"))
-        #expect(!command.contains("--scratch-path"))
     }
 
     @Test
