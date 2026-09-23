@@ -296,7 +296,7 @@ The same check is also available at commit time under `pre-commit.pr-size` (same
 2. **Collect staged files** via `git diff --cached --name-only`
 3. **Run custom tasks** in dependency order, filtering by `on-files` patterns (trusted repositories only)
 4. **Discover linters** available on the system
-5. **Run linters** grouped by closest config file (e.g. closest `.swiftlint.yml`)
+5. **Run linters** on the staged content, grouped by closest config file (e.g. closest `.swiftlint.yml`). The linters read a private copy of the index, with the lint configuration files as staged, so unstaged edits neither block nor excuse a commit.
 
 ### Pre-push flow
 

@@ -36,3 +36,36 @@ struct LintOutcomeTests {
         #expect(!LintOutcome.timedOut.passes)
     }
 }
+
+struct LintConfigurationTests {
+    @Test
+    func `SwiftLint includes are local parent and child configurations`() {
+        let yaml = """
+            parent_config: ../base.yml
+            child_config: strict.yml
+            only_rules:
+              - force_cast
+            """
+
+        #expect(LintConfiguration.swiftLintReferences(in: yaml) == ["../base.yml", "strict.yml"])
+    }
+
+    @Test
+    func `remote SwiftLint includes are left to SwiftLint`() {
+        #expect(LintConfiguration.swiftLintReferences(in: "parent_config: https://example.com/base.yml\n").isEmpty)
+    }
+
+    @Test(arguments: ["", "- not a mapping\n", "parent_config: [1, 2]\n"])
+    func `a configuration without includes has none`(yaml: String) {
+        #expect(LintConfiguration.swiftLintReferences(in: yaml).isEmpty)
+    }
+
+    @Test
+    func `configuration file names include every linter's and .swift-version`() {
+        #expect(
+            LintConfiguration.fileNames.isSuperset(of: [
+                ".swiftlint.yml", ".swiftlint.yaml", ".swiftformat", ".swift-format", ".editorconfig", "detekt.yml",
+                ".swift-version",
+            ]))
+    }
+}

@@ -96,6 +96,9 @@ public enum LinterDiscovery {
         ),
     ]
 
+    /// Every configuration file that a known linter looks for, relative to the directory it applies to.
+    public static let configCandidates = (iosDefinitions + androidDefinitions).flatMap(\.configCandidates)
+
     public static let knownIOSLinters = iosDefinitions.map(\.name)
     public static let knownAndroidLinters = androidDefinitions.map(\.name)
 

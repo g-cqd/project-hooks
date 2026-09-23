@@ -99,6 +99,49 @@ struct ScratchRepository {
         return run.output.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    /// Run git in the repository and return its exit status and output, whether or not it succeeds.
+    func gitRun(_ arguments: String...) throws -> ProcessRun {
+        try runProcess(["git"] + arguments, in: root, environment: environment)
+    }
+
+    /// Install the binary under test as the repository's `pre-commit` and `pre-push` hooks.
+    func installHooks() throws {
+        let run = try runProjectHooks(["install"])
+        guard run.exitCode == 0 else {
+            throw ScratchFailure.command(["project-hooks", "install"], run.output)
+        }
+    }
+
+    /// Install a fake `swiftlint` that reports a violation, and exits 2, for each input file that contains "BAD", and
+    /// records the paths it read in `swiftlint-inputs` in the scratch directory.
+    ///
+    /// Also add a `.swiftlint.yml`.
+    func installContentLinter() throws {
+        let inputs = scratch.appendingPathComponent("swiftlint-inputs").path
+        try installTool(
+            "swiftlint",
+            script: """
+                #!/bin/sh
+                status=0
+                i=0
+                while [ "$i" -lt "$SCRIPT_INPUT_FILE_COUNT" ]; do
+                  eval file=\\$SCRIPT_INPUT_FILE_$i
+                  echo "$file" >> '\(inputs)'
+                  if grep -q BAD "$file"; then echo "$file:1:1: error: BAD content"; status=2; fi
+                  i=$((i + 1))
+                done
+                exit $status
+                """)
+        try write(".swiftlint.yml", "only_rules:\n  - force_cast\n")
+    }
+
+    /// The paths that the fake `swiftlint` from `installContentLinter` read, one per input file, in order.
+    func contentLinterInputs() throws -> [String] {
+        let url = scratch.appendingPathComponent("swiftlint-inputs")
+        guard FileManager.default.fileExists(atPath: url.path) else { return [] }
+        return try String(contentsOf: url, encoding: .utf8).split(separator: "\n").map(String.init)
+    }
+
     /// Stage everything and commit it.
     ///
     /// Returns the new commit's hash.

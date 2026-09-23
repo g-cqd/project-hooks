@@ -206,7 +206,12 @@ private func runLintChecks(changedFiles: [String], platform: Platform, repoRoot:
 
     printInfo("Discovered linters: \(linters.map(\.name).joined(separator: ", "))")
     for linter in linters {
-        try runLinterGrouped(linter, files: changedFiles, repoRoot: repoRoot, blockMessage: "Push")
+        try runLinterGrouped(
+            linter,
+            files: changedFiles,
+            workspace: LintWorkspace(repoRoot: repoRoot),
+            blockMessage: "Push",
+        )
     }
 }
 
