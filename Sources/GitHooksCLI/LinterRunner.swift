@@ -148,12 +148,16 @@ func runLinterCommand(
         return .passed
     }
 
-    let result = try runCommand(
-        invocation.args,
-        currentDirectory: workspace.root,
-        environment: invocation.env,
-        timeoutSeconds: timeout,
-    )
+    // The workspace is a copy, not the repository: a linter that runs git there must not reach the repository through
+    // the hook's `GIT_DIR` or `GIT_INDEX_FILE`.
+    let result = try CommandScope.$removedVariables.withValue(VerificationWorktree.repositoryVariables) {
+        try runCommand(
+            invocation.args,
+            currentDirectory: workspace.root,
+            environment: invocation.env,
+            timeoutSeconds: timeout,
+        )
+    }
     let output = workspace.repositoryPaths(in: result.combinedText)
 
     if result.timedOut {

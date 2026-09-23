@@ -42,23 +42,21 @@ struct VerificationWorktree {
             withIntermediateDirectories: true,
         )
         do {
-            try worktree.inScope {
-                // No hook runs for this checkout, so creating it cannot start another verification.
-                try worktree.git(
-                    [
-                        "-c",
-                        "core.hooksPath=/dev/null",
-                        "worktree",
-                        "add",
-                        "--detach",
-                        "--force",
-                        "--quiet",
-                        path,
-                        commit,
-                    ],
-                    in: repoRoot,
-                )
-                if FileManager.default.fileExists(atPath: "\(path)/.gitmodules") {
+            // No hook runs for this checkout, so creating it cannot start another verification.
+            let add = [
+                "-c",
+                "core.hooksPath=/dev/null",
+                "worktree",
+                "add",
+                "--detach",
+                "--force",
+                "--quiet",
+                path,
+                commit,
+            ]
+            try worktree.gitInRepository(add, repoRoot: repoRoot)
+            if FileManager.default.fileExists(atPath: "\(path)/.gitmodules") {
+                try worktree.inScope {
                     try worktree.git(["submodule", "update", "--init", "--recursive", "--quiet"], in: path)
                 }
             }
@@ -78,17 +76,29 @@ struct VerificationWorktree {
     ///
     /// Failures are reported, not thrown, so that they cannot replace the verification's own outcome.
     func remove(repoRoot: String) {
-        inScope {
-            do {
-                try git(["worktree", "remove", "--force", "--force", path], in: repoRoot, interruptible: false)
-            } catch {
-                // Not registered, or not removable: remove the directory, then forget any registration.
-                try? FileManager.default.removeItem(atPath: path)
-                _ = try? runCommand(["git", "worktree", "prune"], currentDirectory: repoRoot, interruptible: false)
-                if FileManager.default.fileExists(atPath: path) {
-                    printWarn("Could not remove the worktree at \(path): \(error)")
-                }
+        do {
+            try gitInRepository(
+                ["worktree", "remove", "--force", "--force", path],
+                repoRoot: repoRoot,
+                interruptible: false,
+            )
+        } catch {
+            // Not registered, or not removable: remove the directory, then forget any registration.
+            try? FileManager.default.removeItem(atPath: path)
+            try? gitInRepository(["worktree", "prune"], repoRoot: repoRoot, interruptible: false)
+            if FileManager.default.fileExists(atPath: path) {
+                printWarn("Could not remove the worktree at \(path): \(error)")
             }
+        }
+    }
+
+    /// Run git in the user's repository.
+    ///
+    /// Git keeps the variables that locate the repository, such as `GIT_DIR` for one with a separate work tree, but not
+    /// `GIT_INDEX_FILE`, which the new worktree's checkout would otherwise write.
+    private func gitInRepository(_ arguments: [String], repoRoot: String, interruptible: Bool = true) throws {
+        try CommandScope.$removedVariables.withValue(["GIT_INDEX_FILE"]) {
+            try git(arguments, in: repoRoot, interruptible: interruptible)
         }
     }
 
