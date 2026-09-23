@@ -7,13 +7,24 @@ import Foundation
 /// deleted; the next run recreates what it needs.
 enum HookCache {
     static var root: String {
-        if let configured = ProcessInfo.processInfo.environment["GITHOOKS_CACHE_DIR"], !configured.isEmpty {
-            return canonicalPath((configured as NSString).expandingTildeInPath)
-        }
         let caches =
             FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first
             ?? FileManager.default.temporaryDirectory
-        return canonicalPath(caches.path) + "/project-hooks"
+        return root(configured: ProcessInfo.processInfo.environment["GITHOOKS_CACHE_DIR"], caches: caches.path)
+    }
+
+    /// `configured` when it is an absolute path, after `~` expansion, and otherwise `project-hooks` in `caches`.
+    ///
+    /// A relative path would resolve inside the repository that the hook runs in.
+    static func root(configured: String?, caches: String) -> String {
+        let fallback = canonicalPath(caches) + "/project-hooks"
+        guard let configured, !configured.isEmpty else { return fallback }
+        let expanded = (configured as NSString).expandingTildeInPath
+        guard expanded.hasPrefix("/") else {
+            printWarn("Ignoring GITHOOKS_CACHE_DIR=\(configured): it must be an absolute path.")
+            return fallback
+        }
+        return canonicalPath(expanded)
     }
 
     /// A stable name for the repository at `repoRoot`: its directory name, and a hash of its common git directory, so
