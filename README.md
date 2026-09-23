@@ -332,12 +332,11 @@ The worktree is a clean checkout of the commit, with its submodules: it has none
 | Variable | Default | Description |
 |---|---|---|
 | `GITHOOKS_TEST_TIMEOUT_SECONDS` | `1200` | Timeout for test execution |
-| `GITHOOKS_BUILD_TIMEOUT_SECONDS` | `600` | Timeout for build steps |
 | `GITHOOKS_DESTINATION` | `generic/platform=iOS Simulator` | Default Xcode simulator destination. The generic form lets xcodebuild pick any available simulator; override to pin a specific device. |
 | `GITHOOKS_<LINTER>_TIMEOUT_SECONDS` | `120` | Per-linter timeout (e.g. `GITHOOKS_SWIFTLINT_TIMEOUT_SECONDS`) |
 | `GITHOOKS_CACHE_DIR` | `~/Library/Caches/project-hooks` | Where build directories, verification worktrees and locks live between runs |
 | `GITHOOKS_BUILD_CACHE_LIMIT_GB` | `10` | Total size of the build directories kept between pushes; the least recently used go first |
-| `GITHOOKS_NO_CACHE` | unset | Set to `1` to run linters, tests and builds even on content that passed before |
+| `GITHOOKS_NO_CACHE` | unset | Set to `1` to run linters and tests even on content that passed before |
 
 ## Architecture
 

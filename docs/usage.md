@@ -236,7 +236,7 @@ The tool finds module boundaries by walking up from each changed file looking fo
 
 It then runs tests only for the affected modules. Each Swift package or Xcode project of each repository has its own build directory in `~/Library/Caches/project-hooks/builds` (`GITHOOKS_CACHE_DIR`), apart from the repository's `.build` and Xcode's DerivedData; Gradle builds in the worktree and reuses outputs through its build cache. Pushes reuse it, so they rebuild only what changed, and the verification worktree has the same path on every push of a repository. When the build directories together exceed `GITHOOKS_BUILD_CACHE_LIMIT_GB` (10 GB by default), the least recently used ones are removed, except those that a run is using. Everything under the cache directory can be deleted at any time.
 
-project-hooks also remembers which test and build commands passed on which tree, in `~/Library/Caches/project-hooks/results`. Pushing a tree that already passed, for example to a second remote or after rewording a commit message, skips them. A result applies only to the same tree, module and command, with the same `swift --version` or `xcodebuild -version` and the same `DEVELOPER_DIR`, `TOOLCHAINS`, `SDKROOT` and `JAVA_HOME`. A test that depends on something else, such as the network or the date, can pass once and fail later; set `GITHOOKS_NO_CACHE=1` to run everything.
+project-hooks also remembers which test commands passed on which tree, in `~/Library/Caches/project-hooks/results`. Pushing a tree that already passed, for example to a second remote or after rewording a commit message, skips them. A result applies only to the same tree, module and command, with the same `swift --version` or `xcodebuild -version` and the same `DEVELOPER_DIR`, `TOOLCHAINS`, `SDKROOT` and `JAVA_HOME`. A test that depends on something else, such as the network or the date, can pass once and fail later; set `GITHOOKS_NO_CACHE=1` to run everything.
 
 Earlier versions built in a new directory under `$TMPDIR/project-hooks-build` for every run: 1.0 never removed them, and 1.1 removed them only when the run finished, not when it was interrupted. project-hooks no longer uses that directory, and you can delete it.
 
@@ -251,12 +251,11 @@ If any changed file matches a `broad-impact-paths` prefix, all bundles run.
 | Variable | Default | Description |
 |---|---|---|
 | `GITHOOKS_TEST_TIMEOUT_SECONDS` | `1200` | Max seconds for test execution |
-| `GITHOOKS_BUILD_TIMEOUT_SECONDS` | `600` | Max seconds for build steps |
 | `GITHOOKS_DESTINATION` | `generic/platform=iOS Simulator` | Xcode simulator destination. Defaults to the generic form so xcodebuild picks any available simulator. |
 | `GITHOOKS_<LINTER>_TIMEOUT_SECONDS` | `120` | Per-linter timeout. Replace `<LINTER>` with the uppercase linter name (e.g. `GITHOOKS_SWIFTLINT_TIMEOUT_SECONDS`) |
 | `GITHOOKS_CACHE_DIR` | `~/Library/Caches/project-hooks` | Where build directories, verification worktrees and locks live between runs |
 | `GITHOOKS_BUILD_CACHE_LIMIT_GB` | `10` | Total size of the build directories kept between pushes |
-| `GITHOOKS_NO_CACHE` | unset | Set to `1` to run linters, tests and builds even on content that passed before |
+| `GITHOOKS_NO_CACHE` | unset | Set to `1` to run linters and tests even on content that passed before |
 
 ## Timeouts and process management
 

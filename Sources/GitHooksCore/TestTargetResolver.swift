@@ -2,16 +2,18 @@ import Foundation
 
 /// A detected project/module boundary with its associated test command.
 public struct DetectedModule: Equatable {
+    /// The module's display name.
     public let name: String
+    /// The module's path relative to the repository root.
     public let path: String
+    /// The command that tests the module, or an empty array if no runner is available.
     public let testCommand: [String]
-    public let buildCommand: [String]
 
-    public init(name: String, path: String, testCommand: [String], buildCommand: [String]) {
+    /// The detected module and the command that tests it.
+    public init(name: String, path: String, testCommand: [String]) {
         self.name = name
         self.path = path
         self.testCommand = testCommand
-        self.buildCommand = buildCommand
     }
 }
 
@@ -67,7 +69,7 @@ public enum TestTargetResolver {
 
     /// Detect all unique modules touched by the given changed files.
     ///
-    /// Each module includes both test and build commands pre-computed.
+    /// Each module includes its test command.
     public static func detectModules(
         changedFiles: [String],
         repoRoot: String,
@@ -94,45 +96,21 @@ public enum TestTargetResolver {
                     name: name,
                     path: modulePath,
                     testCommand: buildTestCommand(modulePath: absoluteModulePath, repoRoot: repoRoot),
-                    buildCommand: buildBuildCommand(modulePath: absoluteModulePath, repoRoot: repoRoot),
                 ))
         }
 
         return modules
     }
 
+    /// The test command for the package or project at `modulePath`, or an empty array when none is detected.
     public static func buildTestCommand(modulePath: String, repoRoot: String) -> [String] {
-        buildCommand(action: .test, modulePath: modulePath, repoRoot: repoRoot)
-    }
-
-    public static func buildBuildCommand(modulePath: String, repoRoot: String) -> [String] {
-        buildCommand(action: .build, modulePath: modulePath, repoRoot: repoRoot)
-    }
-
-    private enum BuildAction {
-        case test, build
-
-        var swiftVerb: String {
-            self == .test ? "test" : "build"
-        }
-
-        var xcodeVerb: String {
-            self == .test ? "test" : "build"
-        }
-
-        var gradleTask: String {
-            self == .test ? "test" : "assembleDebug"
-        }
-    }
-
-    private static func buildCommand(action: BuildAction, modulePath: String, repoRoot: String) -> [String] {
         let fileManager = FileManager.default
         let moduleURL = URL(fileURLWithPath: modulePath)
 
         // Swift Package Manager. Scratch path is injected by the CLI runner via BuildIsolation
         // so creation and cleanup live in one place.
         if fileManager.fileExists(atPath: moduleURL.appendingPathComponent("Package.swift").path) {
-            return ["swift", action.swiftVerb, "--package-path", modulePath]
+            return ["swift", "test", "--package-path", modulePath]
         }
 
         // Xcode project. Same isolation note as above — derivedDataPath is set at run time.
@@ -141,7 +119,7 @@ public enum TestTargetResolver {
         {
             let projectName = (xcodeproj as NSString).deletingPathExtension
             return [
-                "xcodebuild", action.xcodeVerb,
+                "xcodebuild", "test",
                 "-project", moduleURL.appendingPathComponent(xcodeproj).path,
                 "-scheme", projectName,
                 "-destination",
@@ -156,7 +134,7 @@ public enum TestTargetResolver {
         for gradleFile in ["build.gradle.kts", "build.gradle"]
         where fileManager.fileExists(atPath: moduleURL.appendingPathComponent(gradleFile).path) {
             let gradlew = findGradleWrapper(from: modulePath, repoRoot: repoRoot)
-            return [gradlew, "-p", modulePath, action.gradleTask, "--build-cache"]
+            return [gradlew, "-p", modulePath, "test", "--build-cache"]
         }
 
         return []

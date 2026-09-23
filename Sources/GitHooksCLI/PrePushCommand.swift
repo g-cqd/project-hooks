@@ -5,7 +5,7 @@ import GitHooksCore
 struct PrePushCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "pre-push",
-        abstract: "Run pre-push checks (auto-detects platform: lint + test + build)",
+        abstract: "Run pre-push checks (auto-detects platform: lint + test)",
     )
 
     @Argument(help: "The name of the remote being pushed to.")
@@ -407,14 +407,9 @@ private func runTestChecks(
     }
 
     try runModuleTests(modules: modules, checkout: checkout, place: place)
-
-    let untestedModules = modules.filter(\.testCommand.isEmpty)
-    if !untestedModules.isEmpty {
-        try runModuleBuilds(modules: untestedModules, checkout: checkout, place: place)
-    }
 }
 
-/// Whether `runTestChecks` would run a test or build command for these changes.
+/// Whether `runTestChecks` would run a test command for these changes.
 private func hasTests(config: HooksConfig?, changedFiles: [String], platform: Platform, repoRoot: String) -> Bool {
     if let override = config?.prePush.testOverride {
         return !override.skip
@@ -567,52 +562,6 @@ private func runModuleTests(modules: [DetectedModule], checkout: Checkout, place
             case .timedOut, .failed:
                 throw ExitCode(1)
         }
-    }
-}
-
-private func runModuleBuilds(modules: [DetectedModule], checkout: Checkout, place: VerificationPlace) throws {
-    let buildTimeout = timeoutFromEnv("GITHOOKS_BUILD_TIMEOUT_SECONDS", defaultSeconds: 600)
-
-    for module in modules where !module.buildCommand.isEmpty {
-        printSection("Build: \(module.name)")
-        let key = try place.resultKey(
-            kind: "build",
-            module: module.path,
-            command: module.buildCommand,
-            checkout: checkout,
-        )
-        if place.results.hasPassed(key) {
-            reportCachedPass("The build")
-            continue
-        }
-
-        let result = try place.runBuilding(
-            module.buildCommand,
-            module: module.path,
-            in: checkout.root,
-            timeout: buildTimeout,
-        )
-
-        if result.timedOut {
-            printError("Build timed out after \(Int(buildTimeout))s for \(module.name).")
-            throw ExitCode(1)
-        }
-
-        guard result.exitCode == 0 else {
-            let errors = result.combinedText
-                .split(whereSeparator: \.isNewline)
-                .filter { $0.contains("error:") }
-                .suffix(40)
-            printError("Build failed for \(module.name).")
-            for line in errors {
-                print("  \(line)")
-            }
-            printWarn("Push blocked. Fix build errors and push again.")
-            throw ExitCode(1)
-        }
-
-        printOK("Build succeeded for \(module.name).")
-        place.results.recordPass(key)
     }
 }
 
