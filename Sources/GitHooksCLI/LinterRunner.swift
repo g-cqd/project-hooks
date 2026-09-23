@@ -41,7 +41,8 @@ private struct LinterInvocation {
 }
 
 private func swiftLintInvocation(_ linter: DiscoveredLinter, files: [String], config: String?) -> LinterInvocation {
-    var env = ProcessInfo.processInfo.environment
+    // Only the variables that SwiftLint reads: `runCommand` applies them on top of the computed environment.
+    var env: [String: String] = [:]
     env["SCRIPT_INPUT_FILE_COUNT"] = String(files.count)
     for (index, file) in files.enumerated() {
         env["SCRIPT_INPUT_FILE_\(index)"] = file
