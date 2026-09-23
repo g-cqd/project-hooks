@@ -47,7 +47,8 @@ private func swiftLintInvocation(_ linter: DiscoveredLinter, files: [String], co
         env["SCRIPT_INPUT_FILE_\(index)"] = file
     }
     if let config { env["SWIFTLINT_CONFIG_FILE"] = config }
-    var args = [linter.executablePath, "lint", "--strict", "--use-script-input-files"]
+    // Without `--force-exclude`, SwiftLint lints input files that its configuration excludes.
+    var args = [linter.executablePath, "lint", "--strict", "--force-exclude", "--use-script-input-files"]
     if let config { args += ["--config", config] }
     return LinterInvocation(args: args, env: env)
 }
@@ -116,16 +117,14 @@ private func printLinterTimeout(_ linter: DiscoveredLinter, timeout: TimeInterva
 
 // MARK: - Shared linter runner
 
-/// Run a discovered linter against a set of files with an optional config.
-///
-/// Returns the process exit code.
+/// Run a discovered linter against a set of files with an optional config, and print its output.
 func runLinterCommand(
     linter: DiscoveredLinter,
     files: [String],
     config: String?,
     repoRoot: String,
     timeout: TimeInterval,
-) throws -> Int32 {
+) throws -> LintOutcome {
     let absoluteFiles = files.map { "\(repoRoot)/\($0)" }
 
     guard
@@ -137,7 +136,7 @@ func runLinterCommand(
         )
     else {
         printWarn("Unknown linter \(linter.name), skipping.")
-        return 0
+        return .passed
     }
 
     let result = try runCommand(
@@ -149,13 +148,13 @@ func runLinterCommand(
 
     if result.timedOut {
         printLinterTimeout(linter, timeout: timeout, output: result.combinedText)
-        return -1
+        return .timedOut
     }
 
     if !result.combinedText.isEmpty {
         print(result.combinedText, terminator: "")
     }
-    return result.exitCode
+    return LintOutcome.classify(linterName: linter.name, exitCode: result.exitCode, output: result.combinedText)
 }
 
 // MARK: - Grouped linter execution
@@ -220,7 +219,7 @@ func runLinterGrouped(
             print("  - \(file)")
         }
 
-        let exitCode = try runLinterCommand(
+        let outcome = try runLinterCommand(
             linter: linter,
             files: group.files,
             config: group.config,
@@ -228,12 +227,22 @@ func runLinterGrouped(
             timeout: timeout,
         )
 
-        guard exitCode == 0 else {
-            printError("\(linter.name) reported violations.")
+        switch outcome {
+            case .passed:
+                printOK("\(linter.name) checks passed.")
+            case .allFilesExcluded:
+                printOK("\(linter.name) configuration excludes these files. Nothing to lint.")
+            case .violations:
+                printError("\(linter.name) reported violations.")
+            case .failed(let exitCode):
+                printError("\(linter.name) failed to run (exit \(exitCode)). Its output is above.")
+            case .timedOut:
+                break
+        }
+
+        guard outcome.passes else {
             printWarn("\(blockMessage) blocked. Fix issues and try again.")
             throw ExitCode(1)
         }
-
-        printOK("\(linter.name) checks passed.")
     }
 }

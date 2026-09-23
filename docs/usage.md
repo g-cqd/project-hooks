@@ -257,3 +257,5 @@ Commands are executed with configurable timeouts. When a timeout expires:
 | `1` | One or more checks failed |
 
 Any non-zero exit from a custom task, linter, or test runner causes the hook to fail and block the git operation.
+
+Each linter's own violations code (2 for SwiftLint and detekt, 1 for swift-format, SwiftFormat and ktlint) is reported as violations; any other non-zero exit is reported as a failure to run, with the linter's output. SwiftLint runs with `--force-exclude`, so it skips files that its configuration excludes, and a group whose files are all excluded passes.
