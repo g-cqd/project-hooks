@@ -418,9 +418,10 @@ private func ensureNothingUnstaged(
     repoRoot: String,
 ) throws {
     let pathspecs = restagePathspecs(config, matchedFiles: matchedFiles).flatMap(\.self)
-    guard !pathspecs.isEmpty else { return }
-
-    let unstaged = try gitNullSeparated(["diff", "--name-only", "-z", "--"] + pathspecs, repoRoot: repoRoot)
+    var unstaged: [String] = []
+    for chunk in pathspecs.chunked(into: maxArgumentsPerCommand) {
+        unstaged += try gitNullSeparated(["diff", "--name-only", "-z", "--"] + chunk, repoRoot: repoRoot)
+    }
     guard !unstaged.isEmpty else { return }
 
     printError("\(task) restages files that have unstaged changes, and restaging would commit them:")
@@ -437,11 +438,17 @@ private func restageFiles(
     repoRoot: String,
 ) throws {
     for batch in restagePathspecs(config, matchedFiles: matchedFiles) {
-        let result = try runCommand(["git", "add", "--"] + batch, currentDirectory: repoRoot)
-        guard result.exitCode == 0 else {
-            let stderr = result.stderrText.trimmingCharacters(in: .whitespacesAndNewlines)
-            throw HookError.message("Failed to restage files: \(stderr)")
+        for chunk in batch.chunked(into: maxArgumentsPerCommand) {
+            try stage(Array(chunk), repoRoot: repoRoot)
         }
+    }
+}
+
+private func stage(_ pathspecs: [String], repoRoot: String) throws {
+    let result = try runCommand(["git", "add", "--"] + pathspecs, currentDirectory: repoRoot)
+    guard result.exitCode == 0 else {
+        let stderr = result.stderrText.trimmingCharacters(in: .whitespacesAndNewlines)
+        throw HookError.message("Failed to restage files: \(stderr)")
     }
 }
 
@@ -454,4 +461,17 @@ func canonicalPath(_ path: String) -> String {
     guard let resolved = realpath(path, nil) else { return path }
     defer { free(resolved) }
     return String(cString: resolved)
+}
+
+/// The most file arguments that one command gets.
+///
+/// Foundation's `Process` refuses to start a command with more than 4096 arguments, and raises an exception that ends
+/// the hook.
+let maxArgumentsPerCommand = 1000
+
+extension Array {
+    /// The elements in consecutive slices of at most `size` elements each.
+    func chunked(into size: Int) -> [ArraySlice<Element>] {
+        stride(from: 0, to: count, by: size).map { self[$0..<Swift.min($0 + size, count)] }
+    }
 }
