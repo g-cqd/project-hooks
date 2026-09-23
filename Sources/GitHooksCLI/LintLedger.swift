@@ -33,12 +33,21 @@ struct LintLedger {
         return HookCache.digest(["project-hooks lint v1", linter.name, linterIdentity, configuration, file, blob])
     }
 
-    /// The linter's binary, after symbolic links, with its size and modification date, which change when it is updated.
-    static func identity(of linter: DiscoveredLinter) -> String {
+    /// The linter's binary, after symbolic links, with its size and modification date, which change when it is updated,
+    /// and the version that it reports from `directory`: a version manager's shim keeps its path, size and date when
+    /// the version that it selects changes.
+    static func identity(of linter: DiscoveredLinter, in directory: String) -> String {
         let binary = URL(fileURLWithPath: linter.executablePath).resolvingSymlinksInPath()
         let values = try? binary.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey])
         let size = values?.fileSize.map(String.init) ?? "?"
         let modified = values?.contentModificationDate.map { String($0.timeIntervalSince1970) } ?? "?"
-        return "\(binary.path)|\(size)|\(modified)"
+        let probe =
+            linter.usesSwiftSubcommand
+            ? [linter.executablePath, "format", "--version"]
+            : [linter.executablePath, "--version"]
+        let version =
+            (try? runCommand(probe, currentDirectory: directory, timeoutSeconds: 30))
+            .flatMap { $0.exitCode == 0 ? $0.combinedText.trimmingCharacters(in: .whitespacesAndNewlines) : nil } ?? "?"
+        return "\(binary.path)|\(size)|\(modified)|\(version)"
     }
 }
