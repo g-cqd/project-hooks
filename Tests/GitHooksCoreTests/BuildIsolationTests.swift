@@ -11,18 +11,22 @@ struct BuildIsolationTests {
             "-destination", "platform=iOS Simulator,name=iPhone 17 Pro",
         ]
         let augmented = BuildIsolation.inject(into: command, scratchPath: "/tmp/scratch-abc")
-        let derivedIdx = try? #require(augmented.firstIndex(of: "-derivedDataPath"))
-        let pathIdx = derivedIdx.map { augmented.index(after: $0) }
-        #expect(pathIdx.map { augmented[$0] } == "/tmp/scratch-abc")
+        #expect(augmented == command + ["-derivedDataPath", "/tmp/scratch-abc"])
     }
 
     @Test
     func `injects scratch-path for swift`() {
         let command = ["swift", "test", "--package-path", "/repo"]
         let augmented = BuildIsolation.inject(into: command, scratchPath: "/tmp/scratch-xyz")
-        let scratchIdx = try? #require(augmented.firstIndex(of: "--scratch-path"))
-        let pathIdx = scratchIdx.map { augmented.index(after: $0) }
-        #expect(pathIdx.map { augmented[$0] } == "/tmp/scratch-xyz")
+        #expect(augmented == ["swift", "test", "--scratch-path", "/tmp/scratch-xyz", "--package-path", "/repo"])
+    }
+
+    @Test
+    func `injects scratch-path before arguments for the test binary`() {
+        let command = ["swift", "test", "--package-path", "/repo", "--", "--parallel"]
+        let augmented = BuildIsolation.inject(into: command, scratchPath: "/tmp/s")
+        #expect(
+            augmented == ["swift", "test", "--scratch-path", "/tmp/s", "--package-path", "/repo", "--", "--parallel"])
     }
 
     @Test

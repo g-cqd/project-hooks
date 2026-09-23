@@ -195,14 +195,29 @@ struct ScratchRepository {
     }
 
     /// Start the binary in the repository without waiting for it, with `stdin` as its standard input.
-    func startProjectHooks(_ arguments: [String], stdin: String? = nil) throws -> Process {
+    ///
+    /// Its output goes to `output`, or nowhere. With `deadline`, the system ends it after that many seconds, so that a
+    /// test that waits for its output cannot hang.
+    func startProjectHooks(
+        _ arguments: [String],
+        stdin: String? = nil,
+        output: Pipe? = nil,
+        deadline: Int? = nil,
+    ) throws -> Process {
         let process = Process()
-        process.executableURL = URL(fileURLWithPath: ProjectHooksBinary.path)
-        process.arguments = arguments
+        if let deadline {
+            // `alarm` survives `exec`, so the binary keeps the process identifier and receives SIGALRM.
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/perl")
+            process.arguments =
+                ["-e", "alarm shift; exec @ARGV", String(deadline), ProjectHooksBinary.path] + arguments
+        } else {
+            process.executableURL = URL(fileURLWithPath: ProjectHooksBinary.path)
+            process.arguments = arguments
+        }
         process.currentDirectoryURL = root
         process.environment = environment
-        process.standardOutput = FileHandle.nullDevice
-        process.standardError = FileHandle.nullDevice
+        process.standardOutput = output ?? FileHandle.nullDevice
+        process.standardError = output ?? FileHandle.nullDevice
         let input = Pipe()
         process.standardInput = stdin == nil ? FileHandle.nullDevice : input
         try process.run()

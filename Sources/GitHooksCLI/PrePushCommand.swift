@@ -66,23 +66,25 @@ struct PrePushCommand: ParsableCommand {
         )
 
         // --- Steps 3-5: Check each pushed commit as the push sends it, not the working tree ---
-        let place = try trusted ? VerificationPlace(repoRoot: repoRoot) : nil
-        // The worktree and the build directories of a repository serve one run at a time.
-        let lock = try place.map { place in
-            try FileLock(path: place.lockPath) {
-                printInfo("Waiting for another project-hooks run in this repository to finish...")
-            }
-        }
         let changed = commits.filter { !$0.files.isEmpty }
 
         // --- Step 3: Lint every pushed commit, and report every failure, before the slower steps ---
         var failures: [String] = []
         for commit in changed {
-            failures += try lint(commit, trusted: place != nil, repoRoot: repoRoot)
+            failures += try lint(commit, trusted: trusted, repoRoot: repoRoot)
         }
         try blockOnLintFailures(failures, blockMessage: "Push")
 
         // --- Steps 4-5: Custom tasks, tests and builds ---
+        let place = try trusted ? VerificationPlace(repoRoot: repoRoot) : nil
+        // The worktree and the build directories of a repository serve one run at a time.
+        let lock = try place.map { place in
+            try FileLock(path: place.lockPath) {
+                printInfo("Waiting for another project-hooks run in this repository to finish...")
+                // Standard output is buffered when it is a pipe, as in git clients: show the wait now.
+                fflush(nil)
+            }
+        }
         for commit in changed {
             try runTasksAndTests(for: commit, workingTreeConfig: config, place: place, repoRoot: repoRoot)
         }

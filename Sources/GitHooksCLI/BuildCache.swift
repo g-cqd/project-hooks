@@ -39,20 +39,27 @@ struct BuildCache {
         return Entry(key: key, path: path, lockPath: "\(path).lock", usagePath: "\(path).usage")
     }
 
-    /// Run `body` with the entry locked against eviction, then record its size and evict entries beyond the limit,
-    /// whether or not `body` throws.
+    /// Run `body` with the entry locked against eviction, then record its size, whether or not `body` throws, and
+    /// evict entries beyond the limit unless a signal interrupted the hook.
     func use<Value>(_ entry: Entry, _ body: () throws -> Value) throws -> Value {
         let lock = try FileLock(path: entry.lockPath)
         let outcome: Result<Value, any Error>
         do {
             try FileManager.default.createDirectory(atPath: entry.path, withIntermediateDirectories: true)
+            // Listed before the build, so that eviction can find an entry whose first build was killed.
+            if !FileManager.default.fileExists(atPath: entry.usagePath) {
+                try "0".write(toFile: entry.usagePath, atomically: true, encoding: .utf8)
+            }
             outcome = try .success(body())
         } catch {
             outcome = .failure(error)
         }
         recordUsage(of: entry)
         _ = consume lock
-        evict(keeping: entry.key)
+        // After an interruption, exit promptly rather than delete other entries.
+        if Interruption.signal == nil {
+            evict(keeping: entry.key)
+        }
         return try outcome.get()
     }
 

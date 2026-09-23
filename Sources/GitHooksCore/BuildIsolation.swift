@@ -21,7 +21,8 @@ public enum BuildIsolation {
                 guard !command.contains("--scratch-path"), !command.contains("--build-path") else {
                     return command
                 }
-                return command + ["--scratch-path", scratchPath]
+                // Right after the subcommand: arguments after `--`, which `extra-args` can add, go to the test binary.
+                return Array(command.prefix(2)) + ["--scratch-path", scratchPath] + command.dropFirst(2)
             default:
                 // Gradle and other tools are passed through unchanged. Gradle has no build directory flag: a
                 // `buildDir` project property would apply to every project of a multi-project build.

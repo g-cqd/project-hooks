@@ -9,7 +9,8 @@ struct FileLock: ~Copyable {
     /// - Parameters:
     ///   - path: The lock file, created if missing.
     ///   - waiting: Called once, before waiting, when another process holds the lock.
-    /// - Throws: `Interrupted` when a signal interrupts the wait, or `HookError` when the file cannot be opened.
+    /// - Throws: `Interrupted` when a signal interrupts the hook while it waits, or `HookError` when the file cannot be
+    ///   opened or locked.
     init(path: String, waiting: () -> Void = {}) throws {
         descriptor = try Self.lockedDescriptor(path: path, waiting: waiting)
     }
@@ -39,17 +40,20 @@ struct FileLock: ~Copyable {
         if flock(descriptor, LOCK_EX | LOCK_NB) == 0 { return descriptor }
 
         waiting()
-        while flock(descriptor, LOCK_EX) != 0 {
+        // Poll rather than block, so that a signal that arrives just before the wait still ends it.
+        var interval = 0.001
+        while flock(descriptor, LOCK_EX | LOCK_NB) != 0 {
             let error = errno
-            // The signal handlers do not restart system calls, so an interruption ends the wait.
-            if error == EINTR, let signal = Interruption.signal {
-                close(descriptor)
-                throw Interrupted(signal: signal)
-            }
-            guard error == EINTR else {
+            guard error == EWOULDBLOCK || error == EINTR else {
                 close(descriptor)
                 throw HookError.message("Could not lock \(path): \(String(cString: strerror(error)))")
             }
+            if let signal = Interruption.signal {
+                close(descriptor)
+                throw Interrupted(signal: signal)
+            }
+            Thread.sleep(forTimeInterval: interval)
+            interval = min(interval * 2, 0.1)
         }
         return descriptor
     }
