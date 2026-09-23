@@ -115,16 +115,16 @@ struct LinterDiscoveryTests {
     }
 
     @Test
-    func `swift format falls back to swift subcommand when standalone binary not found`() {
+    func `swift-format comes from a toolchain and says where from`() {
         let linters = LinterDiscovery.discoverLinters(
             forPlatform: .ios,
             repoRoot: "/tmp/nonexistent",
         )
-        // swift-format should always be discovered (via swift binary fallback)
-        let swiftFormat = linters.first(where: { $0.name == "swift-format" })
-        #expect(swiftFormat != nil, "swift-format should be discovered via swift binary fallback")
-        if let sf = swiftFormat, sf.usesSwiftSubcommand {
-            #expect(sf.executablePath.hasSuffix("swift"))
+        // Absent only on a machine without any toolchain that ships swift-format.
+        if let swiftFormat = linters.first(where: { $0.name == "swift-format" }) {
+            #expect(swiftFormat.executablePath.hasSuffix("/swift-format"))
+            #expect(!swiftFormat.usesSwiftSubcommand)
+            #expect(swiftFormat.origin != nil)
         }
     }
 }

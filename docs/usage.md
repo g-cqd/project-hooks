@@ -200,7 +200,7 @@ When filtering files, it uses extensions: `.swift` for iOS, `.kt`/`.kts`/`.java`
 
 ## Linter discovery
 
-Linters are discovered by checking if their binary exists via `which` or in known fallback paths:
+Linters are discovered by checking if their binary exists via `which` or in known fallback paths, except swift-format:
 
 | Platform | Linter | Binary | Fallback path |
 |---|---|---|---|
@@ -211,6 +211,13 @@ Linters are discovered by checking if their binary exists via `which` or in know
 | Android | detekt | `detekt` | — |
 
 Fallback paths are inside the repository, so they are searched only in trusted repositories.
+
+swift-format is never looked up on `PATH`, because a git client launched from the Dock gets a different `PATH` from your terminal, and a different swift-format can reach a different verdict on the same files:
+
+1. When the repository root has a `.swift-version`, project-hooks asks swiftly (from `~/.swiftly/bin`, `/opt/homebrew/bin` or `/usr/local/bin`, in that order) for that toolchain, and uses its `swift-format`.
+2. Otherwise, or when swiftly or that toolchain is missing, it uses the `swift-format` of the toolchain that `xcode-select` or `DEVELOPER_DIR` selects (`/usr/bin/xcrun --find swift-format`).
+
+The hook prints the binary it runs, its version, and why it fell back when it did.
 
 Files are grouped by their closest config file (walking up the directory tree). This means monorepos with multiple linter configs are handled correctly.
 

@@ -12,6 +12,8 @@ public struct DiscoveredLinter: Equatable {
     public let requiresConfig: Bool
     /// When true, the linter is invoked via `swift format` subcommand instead of a standalone binary.
     public let usesSwiftSubcommand: Bool
+    /// Where the binary came from, when discovery chose it by a rule other than `PATH` lookup.
+    public let origin: String?
 
     public init(
         name: String,
@@ -20,6 +22,7 @@ public struct DiscoveredLinter: Equatable {
         platform: Platform,
         requiresConfig: Bool = true,
         usesSwiftSubcommand: Bool = false,
+        origin: String? = nil,
     ) {
         self.name = name
         self.executablePath = executablePath
@@ -27,6 +30,7 @@ public struct DiscoveredLinter: Equatable {
         self.platform = platform
         self.requiresConfig = requiresConfig
         self.usesSwiftSubcommand = usesSwiftSubcommand
+        self.origin = origin
     }
 }
 
@@ -37,21 +41,21 @@ public enum LinterDiscovery {
         let binary: String
         let configCandidates: [String]
         let requiresConfig: Bool
-        /// When true, falls back to resolving via `swift` binary if the standalone binary is not found.
-        let canFallbackToSwift: Bool
+        /// When true, the binary comes from a Swift toolchain chosen by `SwiftFormatResolver`, not from `PATH`.
+        let comesFromSwiftToolchain: Bool
 
         init(
             name: String,
             binary: String,
             configCandidates: [String],
             requiresConfig: Bool,
-            canFallbackToSwift: Bool = false,
+            comesFromSwiftToolchain: Bool = false,
         ) {
             self.name = name
             self.binary = binary
             self.configCandidates = configCandidates
             self.requiresConfig = requiresConfig
-            self.canFallbackToSwift = canFallbackToSwift
+            self.comesFromSwiftToolchain = comesFromSwiftToolchain
         }
     }
 
@@ -73,7 +77,7 @@ public enum LinterDiscovery {
             binary: "swift-format",
             configCandidates: [".swift-format"],
             requiresConfig: true,
-            canFallbackToSwift: true,
+            comesFromSwiftToolchain: true,
         ),
     ]
 
@@ -96,6 +100,14 @@ public enum LinterDiscovery {
     public static let knownAndroidLinters = androidDefinitions.map(\.name)
 
     /// Discover all available linters for the given platform.
+    ///
+    /// swift-format comes from `SwiftFormatResolver`, so that the same staged files meet the same swift-format whatever
+    /// `PATH` the hook inherits. The other linters come from `PATH`, then from `fallbackPaths`.
+    /// - Parameters:
+    ///   - platform: The platform whose linters to look for.
+    ///   - repoRoot: The repository's working tree, whose `.swift-version` selects swift-format.
+    ///   - fallbackPaths: Paths relative to `repoRoot` to try, by binary name, when `PATH` has no such binary.
+    /// - Returns: The linters that were found, in the platform's order.
     public static func discoverLinters(
         forPlatform platform: Platform,
         repoRoot: String,
@@ -111,36 +123,33 @@ public enum LinterDiscovery {
         }
 
         return definitions.compactMap { item in
-            // Try the standalone binary first
-            if let execPath = resolveExecutable(
-                name: item.def.binary,
-                fallbackRelativePath: fallbackPaths[item.def.binary],
-                repoRoot: repoRoot,
-            ) {
+            if item.def.comesFromSwiftToolchain {
+                let home = FileManager.default.homeDirectoryForCurrentUser.path
+                guard let resolution = SwiftFormatResolver.resolve(repoRoot: repoRoot, home: home) else { return nil }
                 return DiscoveredLinter(
                     name: item.def.name,
-                    executablePath: execPath,
+                    executablePath: resolution.executablePath,
                     configCandidates: item.def.configCandidates,
                     platform: item.platform,
                     requiresConfig: item.def.requiresConfig,
+                    origin: [resolution.origin, resolution.fallbackReason].compactMap(\.self).joined(separator: "; "),
                 )
             }
 
-            // Fall back to `swift` binary for tools bundled in the Swift toolchain
-            if item.def.canFallbackToSwift,
-                let swiftPath = resolveExecutable(name: "swift", fallbackRelativePath: nil, repoRoot: repoRoot)
-            {
-                return DiscoveredLinter(
-                    name: item.def.name,
-                    executablePath: swiftPath,
-                    configCandidates: item.def.configCandidates,
-                    platform: item.platform,
-                    requiresConfig: item.def.requiresConfig,
-                    usesSwiftSubcommand: true,
+            guard
+                let execPath = resolveExecutable(
+                    name: item.def.binary,
+                    fallbackRelativePath: fallbackPaths[item.def.binary],
+                    repoRoot: repoRoot,
                 )
-            }
-
-            return nil
+            else { return nil }
+            return DiscoveredLinter(
+                name: item.def.name,
+                executablePath: execPath,
+                configCandidates: item.def.configCandidates,
+                platform: item.platform,
+                requiresConfig: item.def.requiresConfig,
+            )
         }
     }
 
@@ -170,14 +179,8 @@ public enum LinterDiscovery {
         process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
         process.arguments = ["which", name]
 
-        let preferredPaths = ["/opt/homebrew/bin", "/opt/homebrew/sbin", "/usr/local/bin", "/usr/local/sbin"]
         var env = ProcessInfo.processInfo.environment
-        let currentPath = env["PATH"] ?? ""
-        var pathEntries = currentPath.split(separator: ":").map(String.init)
-        for path in preferredPaths.reversed() where !pathEntries.contains(path) {
-            pathEntries.insert(path, at: 0)
-        }
-        env["PATH"] = pathEntries.joined(separator: ":")
+        env["PATH"] = EnvDiscovery.pathPreferringPackageManagers(env["PATH"] ?? "")
         process.environment = env
 
         let pipe = Pipe()
