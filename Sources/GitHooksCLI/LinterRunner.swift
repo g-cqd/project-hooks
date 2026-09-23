@@ -2,10 +2,36 @@ import ArgumentParser
 import Foundation
 import GitHooksCore
 
+/// Linters that a repository builds itself, by binary name, at paths relative to its root.
+///
+/// A binary that the repository builds is the repository's own code, so these paths are searched only in trusted
+/// repositories.
 let defaultLinterFallbackPaths: [String: String] = [
     "swiftlint": "BuildTools/.build/release/swiftlint",
     "swiftformat": "BuildTools/.build/release/swiftformat",
 ]
+
+/// Discover the linters for `platform`, searching `defaultLinterFallbackPaths` only when the repository is trusted.
+///
+/// In an untrusted repository, report each linter build that was skipped because no installed linter replaces it.
+func discoverLinters(platform: Platform, repoRoot: String, trusted: Bool) -> [DiscoveredLinter] {
+    let linters = LinterDiscovery.discoverLinters(
+        forPlatform: platform,
+        repoRoot: repoRoot,
+        fallbackPaths: trusted ? defaultLinterFallbackPaths : [:],
+    )
+    guard !trusted, platform == .ios || platform == .mixed else { return linters }
+
+    let discoveredBinaries = Set(linters.map { URL(fileURLWithPath: $0.executablePath).lastPathComponent })
+    let skippedBuilds = defaultLinterFallbackPaths.filter { binary, relativePath in
+        let path = URL(fileURLWithPath: repoRoot).appendingPathComponent(relativePath).path
+        return !discoveredBinaries.contains(binary) && FileManager.default.isExecutableFile(atPath: path)
+    }
+    for (binary, relativePath) in skippedBuilds.sorted(by: { $0.key < $1.key }) {
+        RepositoryTrust.reportSkipped("the repository's own \(binary) at \(relativePath)")
+    }
+    return linters
+}
 
 // MARK: - Linter invocation builder
 

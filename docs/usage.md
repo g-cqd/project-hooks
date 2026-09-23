@@ -41,7 +41,7 @@ Runs pre-commit checks on staged files. Automatically invoked by git when commit
 
 1. Detects the project platform (iOS, Android, mixed)
 2. Collects staged files from the git index
-3. Runs custom tasks defined in `.project-hooks.yml` (if present)
+3. Runs custom tasks defined in `.project-hooks.yml` (if present), in trusted repositories only
 4. Discovers and runs linters available on the system
 5. Exits non-zero if any check fails, blocking the commit
 
@@ -63,9 +63,9 @@ Runs pre-push checks on commits about to be pushed. Automatically invoked by git
 3. Validates commit messages against configured patterns
 4. Checks for rejected git trailers
 5. Collects files changed across all pushed commits — restricted by `work-scope` if configured
-6. Runs custom tasks
+6. Runs custom tasks, in trusted repositories only
 7. Runs linters
-8. Runs tests (auto-detected or via `test-override` config)
+8. Runs tests (auto-detected or via `test-override` config), in trusted repositories only
 9. Exits non-zero if any check fails, blocking the push
 
 > **Note on `work-scope`:** when set, the changed-file set used for steps 5–8 is computed from `merge-base(HEAD, <base>)..HEAD`, with optional `--first-parent` walking and an optional commit-pattern filter. Commit-message validation in step 3 is **not** scoped — every pushed commit is validated regardless. See [configuration.md](configuration.md#pre-pushwork-scope) for details.
@@ -121,6 +121,10 @@ Rewrites the `pre-commit` and `pre-push` hooks that project-hooks generated, so 
 | `--dry-run` | Report what would change without writing anything. |
 
 It finds repositories, their linked worktrees, and their submodules by reading `.git` entries, without running git in them, and skips build directories such as `.build` and `DerivedData`. Hooks from other tools stay unchanged, and running the command again changes nothing.
+
+### `project-hooks trust [--revoke] [--path <repo>]`
+
+Lets project-hooks run the repository's own code: its custom tasks, its builds and tests on push, and linters that it builds itself. Until then, its hooks run only installed linters and commit checks, and say what they skipped. `trust` records the decision as `project-hooks.trusted` in the repository's local git configuration; `--revoke` removes it. See [Trust a repository](../README.md#trust-a-repository).
 
 ### `project-hooks --version`
 
@@ -205,6 +209,8 @@ Linters are discovered by checking if their binary exists via `which` or in know
 | iOS | swift-format | `swift-format` | — |
 | Android | ktlint | `ktlint` | — |
 | Android | detekt | `detekt` | — |
+
+Fallback paths are inside the repository, so they are searched only in trusted repositories.
 
 Files are grouped by their closest config file (walking up the directory tree). This means monorepos with multiple linter configs are handled correctly.
 

@@ -222,7 +222,7 @@ An ordered list of custom tasks. Tasks are topologically sorted by `after` depen
 | `after` | `string` | no | — | Name of another task that must complete before this one. Creates a dependency edge. Circular dependencies are detected and cause an error. If the dependency task was skipped (no matching files), this task is also skipped. |
 | `timeout` | `int` | no | `120` | Maximum seconds the command may run. After this, `SIGTERM` is sent, followed by `SIGKILL` if the process doesn't exit. |
 
-Custom tasks are trusted local automation. They are intentionally executed by a shell and are not sandboxed; only use project or user-level task definitions you trust.
+Custom tasks are executed by a shell and are not sandboxed. They run only in repositories that you trust with `project-hooks trust`, whether they come from the repository's `.project-hooks.yml` or from a user-level config; see [Trust a repository](../README.md#trust-a-repository).
 
 ### `pre-push`
 
@@ -397,7 +397,7 @@ The same check is also available at commit time as [`pre-commit.pr-size`](#pre-c
 
 ### `pre-push.test-override`
 
-Overrides the auto-detected test runner. When not set, the tool auto-detects test modules from changed files.
+Overrides the auto-detected test runner. When not set, the tool auto-detects test modules from changed files. Tests, whether configured or auto-detected, run only in trusted repositories.
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|

@@ -13,6 +13,7 @@ struct PreCommitCommand: ParsableCommand {
         let resolved = try HooksConfig.resolve(repoRoot: repoRoot)
         let config = resolved?.config
         let platform = ProjectDetector.detectPlatform(repoRoot: repoRoot)
+        let trusted = try RepositoryTrust.isTrusted(repoRoot: repoRoot)
 
         printSection("Pre-commit checks")
         printInfo("Platform: \(platform.rawValue)")
@@ -30,22 +31,18 @@ struct PreCommitCommand: ParsableCommand {
         try runPreCommitPRSizeCheck(config: config, repoRoot: repoRoot)
 
         // --- Step 2: Run custom tasks from config ---
-        try runCustomTasks(
-            config?.preCommit.tasks ?? [],
-            files: allStaged,
-            repoRoot: repoRoot,
-            blockMessage: "Commit",
-        )
+        let tasks = config?.preCommit.tasks ?? []
+        if trusted {
+            try runCustomTasks(tasks, files: allStaged, repoRoot: repoRoot, blockMessage: "Commit")
+        } else if !tasks.isEmpty {
+            RepositoryTrust.reportSkipped("\(tasks.count) custom task(s)")
+        }
 
         // --- Step 3: Auto-detect and run all available linters ---
         let effectivePlatform = ProjectDetector.detectPlatformFromFiles(allStaged)
         let resolvedPlatform = effectivePlatform != .unknown ? effectivePlatform : platform
 
-        let linters = LinterDiscovery.discoverLinters(
-            forPlatform: resolvedPlatform,
-            repoRoot: repoRoot,
-            fallbackPaths: defaultLinterFallbackPaths,
-        )
+        let linters = discoverLinters(platform: resolvedPlatform, repoRoot: repoRoot, trusted: trusted)
 
         if linters.isEmpty {
             printWarn("No linters found for platform \(resolvedPlatform.rawValue). Skipping lint checks.")
