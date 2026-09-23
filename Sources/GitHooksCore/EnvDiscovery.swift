@@ -110,9 +110,11 @@ public enum EnvDiscovery {
         "/usr/local/sbin",
     ]
 
-    /// `path` with each directory of `preferredBinPaths` that it lacks prepended, in the order of `preferredBinPaths`.
+    /// `path` with each directory of `preferredBinPaths` that it lacks prepended, in the order of `preferredBinPaths`,
+    /// and without relative entries: commands run in the repository, where a relative entry, or an empty one, which
+    /// means the current directory, would find the repository's own programs.
     public static func pathPreferringPackageManagers(_ path: String) -> String {
-        var entries = path.split(separator: ":").map(String.init)
+        var entries = path.split(separator: ":").map(String.init).filter { $0.hasPrefix("/") }
         let missing = preferredBinPaths.filter { !entries.contains($0) }
         entries.insert(contentsOf: missing, at: 0)
         return entries.joined(separator: ":")

@@ -109,7 +109,16 @@ struct InstallCommand: ParsableCommand {
     }
 }
 
-/// The absolute path of this binary, which generated hooks embed.
+/// The absolute path of this binary, which generated hooks embed: the file that the kernel ran, not `argv[0]`, which a
+/// shell can set to a bare name that would resolve inside the current repository.
 func runningBinaryPath() -> String {
-    URL(fileURLWithPath: ProcessInfo.processInfo.arguments[0]).standardized.path
+    var size: UInt32 = 0
+    _ = _NSGetExecutablePath(nil, &size)
+    // `_NSGetExecutablePath` writes at most `size` bytes, including the terminating NUL, into the buffer.
+    var buffer = [CChar](repeating: 0, count: Int(size) + 1)
+    let status = buffer.withUnsafeMutableBufferPointer { _NSGetExecutablePath($0.baseAddress, &size) }
+    guard status == 0 else { return URL(fileURLWithPath: ProcessInfo.processInfo.arguments[0]).standardized.path }
+    let path = String(decoding: buffer.prefix { $0 != 0 }.map { UInt8(bitPattern: $0) }, as: UTF8.self)
+    // A relative path means that the binary ran by that relative path, so it names this file from here.
+    return URL(fileURLWithPath: path).standardized.path
 }

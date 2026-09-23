@@ -12,7 +12,7 @@ struct HookInstallerTests {
     @Test
     func `hook script contains shebang`() {
         let script = HookInstaller.hookScript()
-        #expect(script.hasPrefix("#!/usr/bin/env bash"))
+        #expect(script.hasPrefix("#!/bin/bash\n"))
     }
 
     @Test
@@ -133,7 +133,7 @@ struct HookInstallerTests {
             #expect(perms == 0o755, "\(hookName) should have 755 permissions")
 
             let content = try String(contentsOfFile: hookPath, encoding: .utf8)
-            #expect(content.hasPrefix("#!/usr/bin/env bash"))
+            #expect(content.hasPrefix("#!/bin/bash"))
         }
     }
 
@@ -190,7 +190,7 @@ struct HookInstallerTests {
             #expect(FileManager.default.isExecutableFile(atPath: hookPath))
 
             let content = try String(contentsOfFile: hookPath, encoding: .utf8)
-            #expect(content.contains("#!/usr/bin/env bash"))
+            #expect(content.contains("#!/bin/bash"))
             #expect(content.contains("HOOK_NAME"))
             #expect(content.contains("project-hooks"))
         }

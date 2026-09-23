@@ -253,7 +253,8 @@ enum ProjectHooksBinary {
 
 /// Run a command and wait for it.
 ///
-/// Output goes to a file, so a large output cannot block the child.
+/// Output goes to a file, so a large output cannot block the child. A command without a slash is found on the `PATH`
+/// of `environment`.
 func runProcess(
     _ command: [String],
     in directory: URL,
