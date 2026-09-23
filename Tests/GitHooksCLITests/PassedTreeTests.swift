@@ -23,20 +23,25 @@ struct PassedTreeTests {
 
     @Test
     func `a different tree, command or opt-out runs the tests again`() throws {
-        let repository = try makeRepository()
+        let repository = try ScratchRepository.make()
         defer { repository.remove() }
+        let log = repository.scratch.appendingPathComponent("test-runs").path
+        try repository.installTool(
+            "xcodebuild",
+            script: "#!/bin/sh\n[ \"$1\" = \"-version\" ] && echo 'Xcode 26.0' && exit 0\necho run >> '\(log)'\n",
+        )
+        try repository.write(".project-hooks.yml", "pre-push:\n  test-override:\n    type: xcodebuild\n")
+        try repository.write("Sources/App.swift", "let value = 1\n")
         let first = try repository.commitAll("Add the app")
+        try repository.trust()
         _ = try repository.runPrePush(localSHA: first)
 
         try repository.write("Sources/App.swift", "let value = 2\n")
         let changed = try repository.commitAll("Change the app")
         _ = try repository.runPrePush(localSHA: changed, remoteSHA: first)
-        // The configuration comes from the working tree, so this changes the command but not the tree.
-        try repository.write(
-            ".project-hooks.yml",
-            "pre-push:\n  test-override:\n    type: gradle\n    extra-args: [\"--offline\"]\n",
-        )
-        _ = try repository.runPrePush(localSHA: changed, remoteSHA: first)
+        // The destination is part of the command, and does not change the tree.
+        let otherDestination = ["GITHOOKS_DESTINATION": "platform=macOS"]
+        _ = try repository.runPrePush(localSHA: changed, remoteSHA: first, extraEnvironment: otherDestination)
         _ = try repository.runPrePush(localSHA: changed, remoteSHA: first, extraEnvironment: ["GITHOOKS_NO_CACHE": "1"])
 
         #expect(try testRuns(in: repository) == 4)

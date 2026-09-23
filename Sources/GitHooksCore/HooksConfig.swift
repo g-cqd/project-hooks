@@ -392,8 +392,15 @@ extension HooksConfig {
     /// - **Flat**: standard hook config that applies to all repos
     /// - **Projects-list**: keyed by path/glob patterns under a `projects` key
     public static func resolve(repoRoot: String) throws -> ResolvedConfig? {
+        try resolve(repoRoot: repoRoot, localConfigRoot: repoRoot)
+    }
+
+    /// Resolve config for a checkout of the repository at `repoRoot` that lives elsewhere, such as a worktree at a
+    /// pushed commit: the local `.project-hooks.yml` comes from `localConfigRoot`, while user-level `projects:`
+    /// patterns still match `repoRoot`.
+    public static func resolve(repoRoot: String, localConfigRoot: String) throws -> ResolvedConfig? {
         // 1. Local repo config (always flat format)
-        let localPath = URL(fileURLWithPath: repoRoot)
+        let localPath = URL(fileURLWithPath: localConfigRoot)
             .appendingPathComponent(configFileName)
             .path
 
