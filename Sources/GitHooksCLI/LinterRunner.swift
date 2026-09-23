@@ -118,14 +118,22 @@ private func printLinterTimeout(_ linter: DiscoveredLinter, timeout: TimeInterva
 // MARK: - Shared linter runner
 
 /// Run a discovered linter against a set of files with an optional config, and print its output.
+/// - Parameters:
+///   - linter: The linter to run.
+///   - files: Paths relative to `workspace.root`.
+///   - config: The configuration file that covers the files, if any.
+///   - workspace: Where the files are, and which paths the output names instead.
+///   - timeout: How long the linter may run.
+/// - Returns: How the run ended.
+/// - Throws: When the linter cannot start.
 func runLinterCommand(
     linter: DiscoveredLinter,
     files: [String],
     config: String?,
-    repoRoot: String,
+    workspace: LintWorkspace,
     timeout: TimeInterval,
 ) throws -> LintOutcome {
-    let absoluteFiles = files.map { "\(repoRoot)/\($0)" }
+    let absoluteFiles = files.map { "\(workspace.root)/\($0)" }
 
     guard
         let invocation = buildLinterInvocation(
@@ -141,20 +149,21 @@ func runLinterCommand(
 
     let result = try runCommand(
         invocation.args,
-        currentDirectory: repoRoot,
+        currentDirectory: workspace.root,
         environment: invocation.env,
         timeoutSeconds: timeout,
     )
+    let output = workspace.repositoryPaths(in: result.combinedText)
 
     if result.timedOut {
-        printLinterTimeout(linter, timeout: timeout, output: result.combinedText)
+        printLinterTimeout(linter, timeout: timeout, output: output)
         return .timedOut
     }
 
-    if !result.combinedText.isEmpty {
-        print(result.combinedText, terminator: "")
+    if !output.isEmpty {
+        print(output, terminator: "")
     }
-    return LintOutcome.classify(linterName: linter.name, exitCode: result.exitCode, output: result.combinedText)
+    return LintOutcome.classify(linterName: linter.name, exitCode: result.exitCode, output: output)
 }
 
 /// The linter's binary, where it came from, and, for swift-format, whose verdict depends on the toolchain, its version.
@@ -187,13 +196,19 @@ private func linterHasConfig(_ linter: DiscoveredLinter, repoRoot: String) -> Bo
 /// Run a linter against files grouped by their closest config file.
 ///
 /// Used by both pre-commit and pre-push commands.
+/// - Parameters:
+///   - linter: The linter to run.
+///   - files: Repository-relative paths. The linter reads them, and their configuration, from `workspace.root`.
+///   - workspace: Where the linter reads the files, and which paths its output names instead.
+///   - blockMessage: The operation that a failure blocks, such as "Commit".
+/// - Throws: `ExitCode(1)` when a group does not pass, or an error when the linter cannot start.
 func runLinterGrouped(
     _ linter: DiscoveredLinter,
     files: [String],
-    repoRoot: String,
+    workspace: LintWorkspace,
     blockMessage: String,
 ) throws {
-    if linter.requiresConfig, !linterHasConfig(linter, repoRoot: repoRoot) {
+    if linter.requiresConfig, !linterHasConfig(linter, repoRoot: workspace.root) {
         printOK("No config found for \(linter.name). Skipping.")
         return
     }
@@ -212,7 +227,7 @@ func runLinterGrouped(
 
     let groups = ConfigResolver.groupFilesByConfig(
         files: relevantFiles,
-        repoRoot: repoRoot,
+        repoRoot: workspace.root,
         candidates: linter.configCandidates,
     )
 
@@ -220,8 +235,8 @@ func runLinterGrouped(
         // Show config path relative to repo root for clarity
         let configLabel =
             group.config.map { configPath in
-                if configPath.hasPrefix(repoRoot) {
-                    return String(configPath.dropFirst(repoRoot.count + 1))
+                if configPath.hasPrefix(workspace.root) {
+                    return String(configPath.dropFirst(workspace.root.count + 1))
                 }
                 return configPath
             } ?? "no config"
@@ -229,7 +244,7 @@ func runLinterGrouped(
         printSection("\(linter.name) (\(configLabel), \(group.files.count) file(s))")
 
         if let config = group.config {
-            printInfo("Config: \(config)")
+            printInfo("Config: \(workspace.repositoryPaths(in: config))")
         }
 
         for file in group.files {
@@ -240,7 +255,7 @@ func runLinterGrouped(
             linter: linter,
             files: group.files,
             config: group.config,
-            repoRoot: repoRoot,
+            workspace: workspace,
             timeout: timeout,
         )
 

@@ -48,8 +48,13 @@ struct PreCommitCommand: ParsableCommand {
             printWarn("No linters found for platform \(resolvedPlatform.rawValue). Skipping lint checks.")
         } else {
             printInfo("Discovered linters: \(linters.map(\.name).joined(separator: ", "))")
+            // Lint the staged content, which the commit contains, rather than the working tree.
+            let lintable = LinterDiscovery.filterFiles(allStaged, forPlatform: .mixed)
+            let snapshot = try IndexSnapshot.take(repoRoot: repoRoot, paths: lintable)
+            defer { snapshot.remove() }
+            let workspace = LintWorkspace(snapshot: snapshot, repoRoot: repoRoot)
             for linter in linters {
-                try runLinterGrouped(linter, files: allStaged, repoRoot: repoRoot, blockMessage: "Commit")
+                try runLinterGrouped(linter, files: allStaged, workspace: workspace, blockMessage: "Commit")
             }
         }
 

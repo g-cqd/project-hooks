@@ -42,7 +42,7 @@ Runs pre-commit checks on staged files. Automatically invoked by git when commit
 1. Detects the project platform (iOS, Android, mixed)
 2. Collects staged files from the git index
 3. Runs custom tasks defined in `.project-hooks.yml` (if present), in trusted repositories only
-4. Discovers and runs linters available on the system
+4. Discovers linters available on the system and runs them on the staged content: a private copy of the index, with the lint configuration files (and the files that SwiftLint configurations include) as staged
 5. Exits non-zero if any check fails, blocking the commit
 
 ### `project-hooks pre-push <remote-name> <remote-url>`

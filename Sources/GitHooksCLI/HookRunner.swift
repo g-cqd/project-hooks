@@ -154,12 +154,21 @@ private func waitForProcess(_ process: Process, deadline: Date) -> Bool {
 ///
 /// On timeout, the process is killed and partial output is returned
 /// in the `CommandResult` with `timedOut = true` (instead of throwing).
+/// - Parameters:
+///   - args: The command and its arguments, found through `PATH` by `/usr/bin/env`.
+///   - currentDirectory: The command's working directory; this process's when nil.
+///   - environment: Variables that override the computed environment.
+///   - timeoutSeconds: How long the command may run; one hour when nil.
+///   - input: The command's standard input. Without it, the command reads from `/dev/null`.
+/// - Returns: The exit status and the captured output.
+/// - Throws: When the command cannot start, or its input or output files cannot be created.
 @discardableResult
 func runCommand(
     _ args: [String],
     currentDirectory: String? = nil,
     environment: [String: String]? = nil,
     timeoutSeconds: TimeInterval? = nil,
+    input: Data? = nil,
 ) throws -> CommandResult {
     let process = Process()
     process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
@@ -167,6 +176,15 @@ func runCommand(
     process.environment = mergedEnvironment(environment)
     // Prevent processes (xcodebuild, gradle) from blocking on stdin reads
     process.standardInput = FileHandle.nullDevice
+    if let input {
+        // A file, not a pipe, so that writing a large input cannot block before the child starts reading.
+        let inputURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("project-hooks-stdin-\(UUID().uuidString)")
+        try input.write(to: inputURL)
+        process.standardInput = try FileHandle(forReadingFrom: inputURL)
+        // The open handle keeps the data readable after the name is gone.
+        try? FileManager.default.removeItem(at: inputURL)
+    }
 
     if let currentDirectory {
         process.currentDirectoryURL = URL(fileURLWithPath: currentDirectory)
