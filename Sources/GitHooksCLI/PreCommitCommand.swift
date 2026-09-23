@@ -54,7 +54,7 @@ struct PreCommitCommand: ParsableCommand {
             defer { snapshot.remove() }
             let workspace = LintWorkspace(snapshot: snapshot, repoRoot: repoRoot)
             for linter in linters {
-                try runLinterGrouped(linter, files: allStaged, workspace: workspace, blockMessage: "Commit")
+                try runLinterGrouped(linter, files: snapshot.files, workspace: workspace, blockMessage: "Commit")
             }
         }
 

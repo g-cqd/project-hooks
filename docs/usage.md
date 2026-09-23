@@ -62,13 +62,12 @@ Runs pre-push checks on commits about to be pushed. Automatically invoked by git
 2. Validates branch name(s) against the configured pattern (if `branch-name` is set)
 3. Validates commit messages against configured patterns
 4. Checks for rejected git trailers
-5. Collects files changed across all pushed commits — restricted by `work-scope` if configured
-6. Runs custom tasks, in trusted repositories only
-7. Runs linters
-8. Runs tests (auto-detected or via `test-override` config), in trusted repositories only
-9. Exits non-zero if any check fails, blocking the push
+5. Collects the files that each distinct pushed commit changes — restricted by `work-scope` if configured
+6. Runs linters on each pushed commit's changed files, from a private copy of that commit, so neither the checked-out branch nor uncommitted changes affect the verdict
+7. In trusted repositories, checks each pushed commit out in a temporary worktree, with its submodules, and runs the custom tasks and the tests there (auto-detected or via `test-override` config); the worktree is removed afterwards. Commands there run without the `GIT_DIR`-style variables that git sets for the hook, and without your uncommitted or untracked files
+8. Exits non-zero if any check fails, blocking the push
 
-> **Note on `work-scope`:** when set, the changed-file set used for steps 5–8 is computed from `merge-base(HEAD, <base>)..HEAD`, with optional `--first-parent` walking and an optional commit-pattern filter. Commit-message validation in step 3 is **not** scoped — every pushed commit is validated regardless. See [configuration.md](configuration.md#pre-pushwork-scope) for details.
+> **Note on `work-scope`:** when set, the changed-file set used for steps 5–7 is computed from `merge-base(HEAD, <base>)..HEAD`, with optional `--first-parent` walking and an optional commit-pattern filter. Commit-message validation in step 3 is **not** scoped — every pushed commit is validated regardless. See [configuration.md](configuration.md#pre-pushwork-scope) for details.
 
 ### `project-hooks check-localization [paths...]`
 
