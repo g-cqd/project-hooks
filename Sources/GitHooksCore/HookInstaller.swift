@@ -32,8 +32,8 @@ public enum HookInstaller {
             done
 
             if [[ -z "$BIN" ]]; then
-              echo "[ERROR] project-hooks binary not found." >&2
-              echo "[INFO] Install it at ~/.local/bin/project-hooks." >&2
+              echo "\(generatedHookSignature)" >&2
+              echo "[INFO] Install it at ~/.local/bin/project-hooks, then run: project-hooks repair" >&2
               exit 1
             fi
 
@@ -73,5 +73,75 @@ public enum HookInstaller {
 
     private static func shellQuoted(_ value: String) -> String {
         "'\(value.replacingOccurrences(of: "'", with: "'\\''"))'"
+    }
+}
+
+// MARK: - Repair
+
+extension HookInstaller {
+    /// What `repairHooks` found, or did, for one hook.
+    public enum RepairOutcome: Equatable, Sendable {
+        /// No hook with this name exists.
+        case missing
+        /// The hook is the current script.
+        case current
+        /// The hook came from project-hooks and differs from the current script. `repairHooks` replaced it,
+        /// unless it ran as a dry run.
+        case outdated
+        /// Another tool wrote the hook. `repairHooks` left it unchanged.
+        case foreign
+    }
+
+    public struct RepairResult: Equatable, Sendable {
+        public let hookPath: String
+        public let outcome: RepairOutcome
+    }
+
+    /// The error line that every hook script from project-hooks prints, in every version, including `bin/run-hook`.
+    internal static let generatedHookSignature = "[ERROR] project-hooks binary not found."
+
+    /// Whether a hook script came from project-hooks, in this version or an earlier one.
+    public static func isGeneratedHook(_ script: String) -> Bool {
+        script.contains(generatedHookSignature)
+    }
+
+    /// Replace each project-hooks hook in `hooksDir` that differs from `hookScript(binaryPath:)`.
+    ///
+    /// Missing hooks stay missing, and hooks from other tools stay unchanged, so calling this again changes nothing.
+    /// - Parameters:
+    ///   - hooksDir: A hooks directory, such as `.git/hooks`.
+    ///   - binaryPath: The binary path to embed in the replacement scripts.
+    ///   - dryRun: When true, report the outcomes without writing anything.
+    /// - Returns: One result per name in `hookNames`, in that order.
+    /// - Throws: When an existing hook cannot be read, or a replacement cannot be written.
+    public static func repairHooks(
+        in hooksDir: String,
+        binaryPath: String?,
+        dryRun: Bool = false,
+    ) throws -> [RepairResult] {
+        let script = hookScript(binaryPath: binaryPath)
+        return try hookNames.map { hook in
+            let hookPath = URL(fileURLWithPath: hooksDir).appendingPathComponent(hook).path
+            guard FileManager.default.fileExists(atPath: hookPath) else {
+                return RepairResult(hookPath: hookPath, outcome: .missing)
+            }
+
+            let existing = try String(contentsOfFile: hookPath, encoding: .utf8)
+            let outcome: RepairOutcome =
+                if existing == script {
+                    .current
+                } else if isGeneratedHook(existing) {
+                    .outdated
+                } else {
+                    .foreign
+                }
+
+            if outcome == .outdated, !dryRun {
+                // An atomic write replaces a symbolic link rather than the file it points to.
+                try script.write(toFile: hookPath, atomically: true, encoding: .utf8)
+                try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: hookPath)
+            }
+            return RepairResult(hookPath: hookPath, outcome: outcome)
+        }
     }
 }

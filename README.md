@@ -42,6 +42,20 @@ project-hooks install --global
 
 `install --path` uses Git's own hook-path resolution, so regular repositories, worktrees, and submodules all install to the correct hooks directory.
 
+### Update hooks in existing repositories
+
+Git copies the template hooks into a repository when it is created or cloned, so `install --global` does not update repositories that already exist. `repair` rewrites the hooks that project-hooks generated, in every repository under the given directories, so that they run the binary you call it with:
+
+```bash
+# Report what would change
+~/.local/bin/project-hooks repair --dry-run ~/Developer
+
+# Rewrite outdated hooks; hooks from other tools stay unchanged
+~/.local/bin/project-hooks repair ~/Developer
+```
+
+Without a directory, `repair` updates the current repository. Running it again changes nothing.
+
 ## Usage
 
 The tool runs automatically via git hooks. You can also invoke it directly:
