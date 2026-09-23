@@ -62,9 +62,17 @@ struct ResultCache {
 
     /// Record that a command with this key passed.
     func recordPass(_ key: String) {
+        recordPasses([key])
+    }
+
+    /// Record that the commands or files with these keys passed.
+    func recordPasses(_ keys: [String]) {
+        guard !keys.isEmpty else { return }
         do {
             try FileManager.default.createDirectory(atPath: directory, withIntermediateDirectories: true)
-            FileManager.default.createFile(atPath: "\(directory)/\(key)", contents: nil)
+            for key in keys {
+                FileManager.default.createFile(atPath: "\(directory)/\(key)", contents: nil)
+            }
             try trim()
         } catch {
             printWarn("Could not record a passing result in \(directory): \(error)")
