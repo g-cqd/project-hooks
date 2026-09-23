@@ -47,26 +47,28 @@ struct ResultCacheTests {
     }
 
     @Test
-    func `recorded passes are found, and the least recently used go beyond capacity`() throws {
+    func `recorded passes are found, and past capacity the least recently used go down to nine tenths`() throws {
         var cache = ResultCache(
             directory: FileManager.default.temporaryDirectory.appendingPathComponent("results-\(UUID().uuidString)")
                 .path,
             isEnabled: true,
         )
-        cache.capacity = 2
+        cache.capacity = 10
         defer { try? FileManager.default.removeItem(atPath: cache.directory) }
 
-        cache.recordPass("first")
-        cache.recordPass("second")
-        try FileManager.default.setAttributes(
-            [.modificationDate: Date(timeIntervalSinceNow: -60)],
-            ofItemAtPath: "\(cache.directory)/first",
-        )
-        cache.recordPass("third")
+        for index in 0..<10 {
+            cache.recordPass("result\(index)")
+            try FileManager.default.setAttributes(
+                [.modificationDate: Date(timeIntervalSinceNow: Double(index - 100))],
+                ofItemAtPath: "\(cache.directory)/result\(index)",
+            )
+        }
+        cache.recordPass("newest")
 
-        #expect(!cache.hasPassed("first"))
-        #expect(cache.hasPassed("second"))
-        #expect(cache.hasPassed("third"))
+        let kept = try FileManager.default.contentsOfDirectory(atPath: cache.directory)
+        #expect(kept.count == 9)
+        #expect(!cache.hasPassed("result0") && !cache.hasPassed("result1"))
+        #expect(cache.hasPassed("result2") && cache.hasPassed("newest"))
     }
 
     @Test
