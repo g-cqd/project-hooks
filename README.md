@@ -337,6 +337,7 @@ The worktree is a clean checkout of the commit, with its submodules: it has none
 | `GITHOOKS_<LINTER>_TIMEOUT_SECONDS` | `120` | Per-linter timeout (e.g. `GITHOOKS_SWIFTLINT_TIMEOUT_SECONDS`) |
 | `GITHOOKS_CACHE_DIR` | `~/Library/Caches/project-hooks` | Where build directories, verification worktrees and locks live between runs |
 | `GITHOOKS_BUILD_CACHE_LIMIT_GB` | `10` | Total size of the build directories kept between pushes; the least recently used go first |
+| `GITHOOKS_NO_CACHE` | unset | Set to `1` to run tests and builds even when they passed on the same tree before |
 
 ## Architecture
 
@@ -366,6 +367,7 @@ ProjectHooks
     ├── TrustCommand, RepositoryTrust # Per-repository trust opt-in
     ├── IndexSnapshot, LintWorkspace  # Private copies of staged or pushed files for linting
     ├── VerificationWorktree         # Worktree at a pushed commit for its tasks and tests
+    ├── BuildCache, ResultCache      # Reused build directories and remembered passing results
     ├── HookRunner                   # Process execution, git helpers
     ├── LinterRunner                 # Linter invocation
     └── TestDiagnostics              # Test failure reporting

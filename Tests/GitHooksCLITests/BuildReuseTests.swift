@@ -13,6 +13,7 @@ struct BuildReuseTests {
             "swift",
             script: """
                 #!/bin/sh
+                [ "$1" = "--version" ] && echo "Swift version 6.4 (fake)" && exit 0
                 package=""; scratch=""; previous=""
                 for argument in "$@"; do
                   [ "$previous" = "--package-path" ] && package="$argument"
