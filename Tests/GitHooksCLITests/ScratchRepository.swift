@@ -139,8 +139,8 @@ struct ScratchRepository {
     /// Install a fake `swiftlint` that reports a violation, and exits 2, for each input file that contains "BAD", and
     /// records the paths it read in `swiftlint-inputs` in the scratch directory.
     ///
-    /// Also add a `.swiftlint.yml`.
-    func installContentLinter() throws {
+    /// Also add a SwiftLint configuration at `configuration`.
+    func installContentLinter(configuration: String = ".swiftlint.yml") throws {
         let inputs = scratch.appendingPathComponent("swiftlint-inputs").path
         try installTool(
             "swiftlint",
@@ -156,7 +156,7 @@ struct ScratchRepository {
                 done
                 exit $status
                 """)
-        try write(".swiftlint.yml", "only_rules:\n  - force_cast\n")
+        try write(configuration, "only_rules:\n  - force_cast\n")
     }
 
     /// The paths that the fake `swiftlint` from `installContentLinter` read, one per input file, in order.

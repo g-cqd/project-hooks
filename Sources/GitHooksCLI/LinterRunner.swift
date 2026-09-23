@@ -184,16 +184,6 @@ private func describe(_ linter: DiscoveredLinter) -> String {
 
 // MARK: - Grouped linter execution
 
-/// Check whether a linter has at least one config file anywhere within the repo root.
-private func linterHasConfig(_ linter: DiscoveredLinter, repoRoot: String) -> Bool {
-    let fm = FileManager.default
-    for candidate in linter.configCandidates {
-        let path = URL(fileURLWithPath: repoRoot).appendingPathComponent(candidate).path
-        if fm.fileExists(atPath: path) { return true }
-    }
-    return false
-}
-
 /// Run a linter against files grouped by their closest config file.
 ///
 /// Used by both pre-commit and pre-push commands.
@@ -209,11 +199,6 @@ func runLinterGrouped(
     workspace: LintWorkspace,
     blockMessage: String,
 ) throws {
-    if linter.requiresConfig, !linterHasConfig(linter, repoRoot: workspace.root) {
-        printOK("No config found for \(linter.name). Skipping.")
-        return
-    }
-
     let relevantFiles = LinterDiscovery.filterFiles(files, forPlatform: linter.platform)
 
     guard !relevantFiles.isEmpty else {
@@ -221,16 +206,24 @@ func runLinterGrouped(
         return
     }
 
-    printInfo(describe(linter))
-
-    let envKey = "GITHOOKS_\(linter.name.uppercased().replacingOccurrences(of: "-", with: "_"))_TIMEOUT_SECONDS"
-    let timeout = timeoutFromEnv(envKey, defaultSeconds: 120)
-
-    let groups = ConfigResolver.groupFilesByConfig(
+    // A linter that requires a configuration lints each file that a configuration covers, wherever that
+    // configuration is, and skips the others.
+    let allGroups = ConfigResolver.groupFilesByConfig(
         files: relevantFiles,
         repoRoot: workspace.root,
         candidates: linter.configCandidates,
     )
+    let groups = linter.requiresConfig ? allGroups.filter { $0.config != nil } : allGroups
+    let uncovered = relevantFiles.count - groups.reduce(0) { $0 + $1.files.count }
+    if uncovered > 0 {
+        printOK("No \(linter.name) config covers \(uncovered) file(s). Skipping them.")
+    }
+    guard !groups.isEmpty else { return }
+
+    printInfo(describe(linter))
+
+    let envKey = "GITHOOKS_\(linter.name.uppercased().replacingOccurrences(of: "-", with: "_"))_TIMEOUT_SECONDS"
+    let timeout = timeoutFromEnv(envKey, defaultSeconds: 120)
 
     for group in groups {
         // Show config path relative to repo root for clarity

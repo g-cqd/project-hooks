@@ -218,7 +218,7 @@ swift-format is never looked up on `PATH`, because a git client launched from th
 
 The hook prints the binary it runs, its version, and why it fell back when it did.
 
-Files are grouped by their closest config file (walking up the directory tree). This means monorepos with multiple linter configs are handled correctly.
+Files are grouped by their closest config file (walking up the directory tree). This means monorepos with multiple linter configs are handled correctly. Every linter requires a config: it lints the files that a config covers, wherever that config is (for example only in `Packages/Kit/`), and skips the others with a note.
 
 ## Test targeting
 
