@@ -336,3 +336,24 @@ struct ConfigResolutionTests {
         #expect(config.prePush.commitMessage == nil)
     }
 }
+
+struct CheckoutConfigResolutionTests {
+    @Test
+    func `the local configuration comes from the checkout`() throws {
+        let repository = try makeTempDir(prefix: "config-repo")
+        let checkout = try makeTempDir(prefix: "config-checkout")
+        defer {
+            try? FileManager.default.removeItem(at: repository)
+            try? FileManager.default.removeItem(at: checkout)
+        }
+        try "pre-push:\n  tasks:\n    - name: \"Repository\"\n      run: \"true\"\n"
+            .write(to: repository.appendingPathComponent(".project-hooks.yml"), atomically: true, encoding: .utf8)
+        try "pre-push:\n  tasks:\n    - name: \"Checkout\"\n      run: \"true\"\n"
+            .write(to: checkout.appendingPathComponent(".project-hooks.yml"), atomically: true, encoding: .utf8)
+
+        let resolved = try HooksConfig.resolve(repoRoot: repository.path, localConfigRoot: checkout.path)
+
+        #expect(resolved?.source == .local)
+        #expect(resolved?.config.prePush.tasks.map(\.name) == ["Checkout"])
+    }
+}

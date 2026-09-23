@@ -14,6 +14,8 @@ The tool searches for configuration in these locations (first match wins, no mer
 
 When a config is found, it is used as-is — configs are **never merged** across levels. A local config completely replaces any user-level config.
 
+Pre-push runs custom tasks and tests on each pushed commit, so for those it reads the `.project-hooks.yml` that the pushed commit contains, and falls back to the user-level configs when the commit has none. Branch-name and commit-message rules come from the working tree's config.
+
 ## User-level config formats
 
 User-level configs (`~/.config/project-hooks/config.yml` or `~/.project-hooks.yml`) support two formats, detected automatically:

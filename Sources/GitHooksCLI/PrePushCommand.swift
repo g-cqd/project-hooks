@@ -84,7 +84,7 @@ struct PrePushCommand: ParsableCommand {
 
         // --- Steps 4-5: Custom tasks, tests and builds ---
         for commit in changed {
-            try runTasksAndTests(for: commit, config: config, place: place, repoRoot: repoRoot)
+            try runTasksAndTests(for: commit, workingTreeConfig: config, place: place, repoRoot: repoRoot)
         }
         _ = consume lock
 
@@ -183,18 +183,18 @@ private func lint(_ commit: PushedCommit, trusted: Bool, repoRoot: String) throw
     return failures.map { "\($0) in \(commit.sha.prefix(10))" }
 }
 
-/// In a trusted repository, which has a `place`, run the custom tasks, the builds and the tests in a worktree at the
-/// commit.
+/// Run the commit's custom tasks, builds and tests in a trusted repository, which has a `place`.
 ///
-/// In an untrusted one, say what did not run.
+/// They run in a worktree at the commit, with the commit's own `.project-hooks.yml`. In an untrusted repository, say
+/// what did not run, from what `workingTreeConfig` asks for.
 private func runTasksAndTests(
     for commit: PushedCommit,
-    config: HooksConfig?,
+    workingTreeConfig: HooksConfig?,
     place: VerificationPlace?,
     repoRoot: String,
 ) throws {
-    let tasks = config?.prePush.tasks ?? []
     guard let place else {
+        let tasks = workingTreeConfig?.prePush.tasks ?? []
         let platform = resolveEffectivePlatform(
             changedFiles: commit.files,
             detected: ProjectDetector.detectPlatform(repoRoot: repoRoot),
@@ -202,7 +202,7 @@ private func runTasksAndTests(
         if !tasks.isEmpty {
             RepositoryTrust.reportSkipped("\(tasks.count) custom task(s)")
         }
-        if hasTests(config: config, changedFiles: commit.files, platform: platform, repoRoot: repoRoot) {
+        if hasTests(config: workingTreeConfig, changedFiles: commit.files, platform: platform, repoRoot: repoRoot) {
             RepositoryTrust.reportSkipped("tests and builds")
         }
         return
@@ -213,9 +213,18 @@ private func runTasksAndTests(
     defer { worktree.remove(repoRoot: repoRoot) }
     let tree = try gitFirstLine(["rev-parse", "\(commit.sha)^{tree}"], repoRoot: repoRoot) ?? commit.sha
     let checkout = Checkout(root: worktree.path, tree: tree)
+    // The commit's own tasks and test settings, which match its content, rather than the working tree's.
+    let resolved = try HooksConfig.resolve(repoRoot: repoRoot, localConfigRoot: worktree.path)
+    let config = resolved?.config
+    if let resolved { printInfo("Config: \(resolved.sourceDescription) at this commit") }
     try worktree.inScope {
         // --- Step 4: Custom pre-push tasks ---
-        try runCustomTasks(tasks, files: commit.files, repoRoot: worktree.path, blockMessage: "Push")
+        try runCustomTasks(
+            config?.prePush.tasks ?? [],
+            files: commit.files,
+            repoRoot: worktree.path,
+            blockMessage: "Push",
+        )
 
         // --- Step 5: Test + build ---
         let platform = resolveEffectivePlatform(
