@@ -85,7 +85,7 @@ struct PushedCommitTests {
     }
 
     @Test
-    func `s run in a clean checkout of the pushed commit, which is removed afterwards`() throws {
+    func `the pushed commit is tested in a clean checkout, which is removed afterwards`() throws {
         let repository = try ScratchRepository.make()
         defer { repository.remove() }
         let log = repository.scratch.appendingPathComponent("test-runs")
