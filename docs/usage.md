@@ -136,7 +136,7 @@ Prints the current version.
 1. The binary path embedded at install time
 2. `~/.local/bin/project-hooks`
 
-The hooks never look inside the repository or on `PATH`. Git does not run hooks that a repository ships, and a cloned repository must not be able to choose the binary that these hooks run either. If neither path holds an executable, the hook fails.
+The hooks never look inside the repository or on `PATH`. Git does not run hooks that a repository ships, and a cloned repository must not be able to choose the binary that these hooks run either. If neither path holds an executable, the hook fails. For the same reason the script runs under `/bin/bash` rather than `env bash`, and project-hooks drops relative `PATH` entries, such as `.` or `node_modules/.bin`, from the environment of every command it runs in the repository.
 
 The install command resolves hook directories through Git, so normal repositories, worktrees, and submodules use the correct hooks path.
 

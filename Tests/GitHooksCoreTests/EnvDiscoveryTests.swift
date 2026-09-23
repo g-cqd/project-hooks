@@ -152,4 +152,24 @@ struct EnvDiscoveryTests {
         )
         #expect(result == nil)
     }
+
+    // MARK: - PATH
+
+    @Test
+    func `package managers' directories come first when PATH lacks them`() {
+        #expect(
+            EnvDiscovery.pathPreferringPackageManagers("/usr/bin:/opt/homebrew/bin")
+                == "/opt/homebrew/sbin:/usr/local/bin:/usr/local/sbin:/usr/bin:/opt/homebrew/bin")
+    }
+
+    @Test(arguments: [".:/usr/bin", "bin:/usr/bin", ":/usr/bin", "/usr/bin::", "node_modules/.bin:/usr/bin"])
+    func `relative PATH entries are dropped, since commands run in the repository`(path: String) {
+        let entries = EnvDiscovery.pathPreferringPackageManagers(path).split(
+            separator: ":",
+            omittingEmptySubsequences: false,
+        )
+
+        #expect(entries.allSatisfy { $0.hasPrefix("/") })
+        #expect(entries.contains("/usr/bin"))
+    }
 }

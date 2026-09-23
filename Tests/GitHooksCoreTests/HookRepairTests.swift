@@ -91,6 +91,19 @@ struct HookRepairTests {
     }
 
     @Test
+    func `a hook that is not text is another tool's, and the others are still repaired`() throws {
+        let hooksDir = try makeHooksDirectory(preCommit: nil, prePush: Self.outdatedHook)
+        defer { removeScratch(containing: hooksDir) }
+        let binary = Data([0xCF, 0xFA, 0xED, 0xFE, 0xFF, 0x00, 0xC3])
+        try binary.write(to: URL(fileURLWithPath: "\(hooksDir)/pre-commit"))
+
+        let results = try HookInstaller.repairHooks(in: hooksDir, binaryPath: "/opt/tools/project-hooks")
+
+        #expect(results.map(\.outcome) == [.foreign, .outdated])
+        #expect(try Data(contentsOf: URL(fileURLWithPath: "\(hooksDir)/pre-commit")) == binary)
+    }
+
+    @Test
     func `other tools' hooks are not recognized as generated`() {
         #expect(!HookInstaller.isGeneratedHook(Self.foreignHook))
     }
