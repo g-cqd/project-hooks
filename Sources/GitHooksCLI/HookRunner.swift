@@ -26,22 +26,11 @@ enum HookError: Error {
     case message(String)
 }
 
-private let preferredBinPaths = [
-    "/opt/homebrew/bin",
-    "/opt/homebrew/sbin",
-    "/usr/local/bin",
-    "/usr/local/sbin",
-]
-
 func mergedEnvironment(_ overrides: [String: String]? = nil) -> [String: String] {
     var env = ProcessInfo.processInfo.environment
 
-    let currentPath = env["PATH"] ?? ""
+    let currentPath = EnvDiscovery.pathPreferringPackageManagers(env["PATH"] ?? "")
     var pathEntries = currentPath.split(separator: ":").map(String.init)
-
-    for preferredPath in preferredBinPaths.reversed() where !pathEntries.contains(preferredPath) {
-        pathEntries.insert(preferredPath, at: 0)
-    }
 
     // Auto-discover JDK so gradle/xcodebuild subprocesses don't trip over macOS's
     // `/usr/bin/java` stub when the user hasn't exported JAVA_HOME themselves.

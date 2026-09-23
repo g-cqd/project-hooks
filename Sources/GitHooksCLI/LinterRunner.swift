@@ -157,6 +157,21 @@ func runLinterCommand(
     return LintOutcome.classify(linterName: linter.name, exitCode: result.exitCode, output: result.combinedText)
 }
 
+/// The linter's binary, where it came from, and, for swift-format, whose verdict depends on the toolchain, its version.
+private func describe(_ linter: DiscoveredLinter) -> String {
+    var description = "\(linter.name): \(linter.executablePath)"
+    if linter.name == "swift-format",
+        let result = try? runCommand([linter.executablePath, "--version"], timeoutSeconds: 10),
+        result.exitCode == 0
+    {
+        description += " (version \(result.stdoutText.trimmingCharacters(in: .whitespacesAndNewlines)))"
+    }
+    if let origin = linter.origin {
+        description += ", \(origin)"
+    }
+    return description
+}
+
 // MARK: - Grouped linter execution
 
 /// Check whether a linter has at least one config file anywhere within the repo root.
@@ -189,6 +204,8 @@ func runLinterGrouped(
         printOK("No \(linter.platform.rawValue) files to lint. Skipping \(linter.name).")
         return
     }
+
+    printInfo(describe(linter))
 
     let envKey = "GITHOOKS_\(linter.name.uppercased().replacingOccurrences(of: "-", with: "_"))_TIMEOUT_SECONDS"
     let timeout = timeoutFromEnv(envKey, defaultSeconds: 120)

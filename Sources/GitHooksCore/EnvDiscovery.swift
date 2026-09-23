@@ -97,6 +97,27 @@ public enum EnvDiscovery {
         return nil
     }
 
+    // MARK: - PATH
+
+    /// Package managers' binary directories.
+    ///
+    /// Subprocesses search the ones that `PATH` lacks before the rest of `PATH`, because git clients launched from the
+    /// Dock get a `PATH` without them.
+    public static let preferredBinPaths = [
+        "/opt/homebrew/bin",
+        "/opt/homebrew/sbin",
+        "/usr/local/bin",
+        "/usr/local/sbin",
+    ]
+
+    /// `path` with each directory of `preferredBinPaths` that it lacks prepended, in the order of `preferredBinPaths`.
+    public static func pathPreferringPackageManagers(_ path: String) -> String {
+        var entries = path.split(separator: ":").map(String.init)
+        let missing = preferredBinPaths.filter { !entries.contains($0) }
+        entries.insert(contentsOf: missing, at: 0)
+        return entries.joined(separator: ":")
+    }
+
     // MARK: - Helpers
 
     static func expandHomeDir(_ path: String, homeDir: String) -> String {

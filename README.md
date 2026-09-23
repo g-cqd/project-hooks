@@ -5,7 +5,7 @@ A git hooks engine for Swift and Android projects. Auto-detects platform, discov
 ## Features
 
 - **Platform auto-detection** — identifies iOS, Android, or mixed projects from repo markers
-- **Linter discovery** — finds SwiftLint, SwiftFormat, swift-format, ktlint, detekt on your system
+- **Linter discovery** — finds SwiftLint, SwiftFormat, swift-format, ktlint, detekt on your system, and reports which binary runs
 - **Smart test targeting** — detects changed modules and runs only the relevant tests
 - **Custom tasks** — run arbitrary commands with file filtering, dependency ordering, and auto-restaging
 - **Commit message validation** — enforce patterns and reject unwanted trailers on push
@@ -322,7 +322,7 @@ The same check is also available at commit time under `pre-commit.pr-size` (same
 |---|---|---|---|
 | iOS | SwiftLint | `swiftlint` | `.swiftlint.yml`, `.swiftlint.yaml` |
 | iOS | SwiftFormat | `swiftformat` | `.swiftformat` |
-| iOS | swift-format | `swift-format` | `.swift-format` |
+| iOS | swift-format | from the `.swift-version` toolchain, else Xcode's ([details](docs/usage.md#linter-discovery)) | `.swift-format` |
 | Android | ktlint | `ktlint` | `.editorconfig`, `.ktlint` |
 | Android | detekt | `detekt` | `detekt.yml`, `detekt.yaml`, `config/detekt/detekt.yml` |
 
