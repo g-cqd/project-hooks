@@ -78,6 +78,27 @@ struct LintRepetitionTests {
         #expect(try repository.contentLinterInputs().count == 3)
     }
 
+    /// From the review of the fix: a version manager's shim keeps its path, size and date when the version that it
+    /// runs changes.
+    @Test
+    func `a new linter version behind the same binary lints the files again`() throws {
+        let repository = try makeRepository()
+        defer { repository.remove() }
+        try repository.write("Packages/One/Sources/One.swift", "let one = 1\n")
+        try repository.git("add", "-A")
+
+        _ = try repository.runProjectHooks(["pre-commit"])
+        _ = try repository.runProjectHooks(["pre-commit"])
+        try "2.0\n".write(
+            to: repository.scratch.appendingPathComponent("swiftlint-version"),
+            atomically: true,
+            encoding: .utf8,
+        )
+        _ = try repository.runProjectHooks(["pre-commit"])
+
+        #expect(try repository.contentLinterInputs().count == 2)
+    }
+
     /// A repository with the content linter and a SwiftLint configuration in each of two packages.
     private func makeRepository(name: String = #function) throws -> ScratchRepository {
         let repository = try ScratchRepository.make(name)

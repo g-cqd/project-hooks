@@ -230,7 +230,7 @@ func runLinterGrouped(
 
     let envKey = "GITHOOKS_\(linter.name.uppercased().replacingOccurrences(of: "-", with: "_"))_TIMEOUT_SECONDS"
     let timeout = timeoutFromEnv(envKey, defaultSeconds: 120)
-    let identity = LintLedger.identity(of: linter)
+    let identity = LintLedger.identity(of: linter, in: workspace.root)
     var failures: [String] = []
 
     for group in groups {

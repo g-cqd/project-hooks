@@ -142,10 +142,12 @@ struct ScratchRepository {
     /// Also add a SwiftLint configuration at `configuration`.
     func installContentLinter(configuration: String = ".swiftlint.yml") throws {
         let inputs = scratch.appendingPathComponent("swiftlint-inputs").path
+        let version = scratch.appendingPathComponent("swiftlint-version").path
         try installTool(
             "swiftlint",
             script: """
                 #!/bin/sh
+                if [ "$1" = "--version" ]; then cat '\(version)' 2>/dev/null || echo 1.0; exit 0; fi
                 status=0
                 i=0
                 while [ "$i" -lt "$SCRIPT_INPUT_FILE_COUNT" ]; do
