@@ -91,10 +91,11 @@ private struct PushedCommit {
     var files: [String]
 }
 
-/// Where a trusted repository's pushed commits are checked out, and where their builds go.
+/// Where a trusted repository's pushed commits are checked out, where their builds go, and which results they reuse.
 private struct VerificationPlace {
     let repositoryKey: String
     let buildCache = BuildCache.standard()
+    let results = ResultCache.standard()
 
     init(repoRoot: String) throws {
         repositoryKey = try HookCache.repositoryKey(repoRoot: repoRoot)
@@ -130,6 +131,31 @@ private struct VerificationPlace {
         let entry = buildCache.entry(repositoryKey: repositoryKey, module: module)
         return try buildCache.use(entry) { try run(BuildIsolation.inject(into: command, scratchPath: entry.path)) }
     }
+
+    /// The key of the result that `command` gives for `module` on the tree that `checkout` holds.
+    func resultKey(kind: String, module: String, command: [String], checkout: Checkout) throws -> String {
+        try ResultCache.key(
+            kind: kind,
+            tree: checkout.tree,
+            module: module,
+            command: command,
+            root: checkout.root,
+            tools: ToolVersions.of(command, in: checkout.root),
+            environment: mergedEnvironment(),
+        )
+    }
+}
+
+/// A pushed commit checked out in a worktree.
+private struct Checkout {
+    let root: String
+    /// The hash of the commit's tree, which identifies its content whatever the commit's message or parents.
+    let tree: String
+}
+
+private func reportCachedPass(_ what: String) {
+    printOK("\(what) passed on this tree before, with the same tools and configuration. Skipping.")
+    printInfo("To run them anyway, set GITHOOKS_NO_CACHE=1.")
 }
 
 /// Lint the commit's files from a snapshot of the commit.
@@ -161,6 +187,8 @@ private func check(_ commit: PushedCommit, config: HooksConfig?, place: Verifica
 
     let worktree = try VerificationWorktree.create(commit: commit.sha, repoRoot: repoRoot, path: place.worktreePath)
     defer { worktree.remove(repoRoot: repoRoot) }
+    let tree = try gitFirstLine(["rev-parse", "\(commit.sha)^{tree}"], repoRoot: repoRoot) ?? commit.sha
+    let checkout = Checkout(root: worktree.path, tree: tree)
     try worktree.inScope {
         // --- Step 4: Custom pre-push tasks ---
         try runCustomTasks(tasks, files: commit.files, repoRoot: worktree.path, blockMessage: "Push")
@@ -174,7 +202,7 @@ private func check(_ commit: PushedCommit, config: HooksConfig?, place: Verifica
             config: config,
             changedFiles: commit.files,
             platform: platform,
-            repoRoot: worktree.path,
+            checkout: checkout,
             place: place,
         )
     }
@@ -310,7 +338,7 @@ private func runTestChecks(
     config: HooksConfig?,
     changedFiles: [String],
     platform: Platform,
-    repoRoot: String,
+    checkout: Checkout,
     place: VerificationPlace,
 ) throws {
     // Config-driven test override
@@ -320,14 +348,14 @@ private func runTestChecks(
             printInfo("Test stage disabled by .project-hooks.yml (test-override.skip: true).")
             return
         }
-        try runTestOverride(override, changedFiles: changedFiles, repoRoot: repoRoot, place: place)
+        try runTestOverride(override, changedFiles: changedFiles, checkout: checkout, place: place)
         return
     }
 
     // Auto-detected module testing
     let modules = TestTargetResolver.detectModules(
         changedFiles: changedFiles,
-        repoRoot: repoRoot,
+        repoRoot: checkout.root,
         platform: platform,
     )
 
@@ -336,11 +364,11 @@ private func runTestChecks(
         return
     }
 
-    try runModuleTests(modules: modules, repoRoot: repoRoot, place: place)
+    try runModuleTests(modules: modules, checkout: checkout, place: place)
 
     let untestedModules = modules.filter(\.testCommand.isEmpty)
     if !untestedModules.isEmpty {
-        try runModuleBuilds(modules: untestedModules, repoRoot: repoRoot, place: place)
+        try runModuleBuilds(modules: untestedModules, checkout: checkout, place: place)
     }
 }
 
@@ -356,12 +384,12 @@ private func hasTests(config: HooksConfig?, changedFiles: [String], platform: Pl
 private func runTestOverride(
     _ override: HooksConfig.TestOverride,
     changedFiles: [String],
-    repoRoot: String,
+    checkout: Checkout,
     place: VerificationPlace,
 ) throws {
     let testTimeout = timeoutFromEnv("GITHOOKS_TEST_TIMEOUT_SECONDS", defaultSeconds: 1200)
 
-    guard var command = try buildOverrideCommand(override, changedFiles: changedFiles, repoRoot: repoRoot) else {
+    guard var command = try buildOverrideCommand(override, changedFiles: changedFiles, repoRoot: checkout.root) else {
         return
     }
 
@@ -370,12 +398,18 @@ private func runTestOverride(
     }
 
     printSection("Tests (config override: \(override.type.rawValue))")
-    let result = try place.runBuilding(command, module: "test-override", in: repoRoot, timeout: testTimeout)
+    let key = try place.resultKey(kind: "test", module: "test-override", command: command, checkout: checkout)
+    if place.results.hasPassed(key) {
+        reportCachedPass("Tests")
+        return
+    }
+
+    let result = try place.runBuilding(command, module: "test-override", in: checkout.root, timeout: testTimeout)
     let outcome = diagnoseTestResult(result, moduleName: override.type.rawValue, timeout: testTimeout)
 
     switch outcome {
         case .passed, .noOp:
-            return
+            place.results.recordPass(key)
         case .timedOut, .failed:
             throw ExitCode(1)
     }
@@ -465,30 +499,57 @@ private func buildXcodebuildOverride(
 
 // MARK: - Module-based test/build execution
 
-private func runModuleTests(modules: [DetectedModule], repoRoot: String, place: VerificationPlace) throws {
+private func runModuleTests(modules: [DetectedModule], checkout: Checkout, place: VerificationPlace) throws {
     let testTimeout = timeoutFromEnv("GITHOOKS_TEST_TIMEOUT_SECONDS", defaultSeconds: 1200)
 
     for module in modules where !module.testCommand.isEmpty {
         printSection("Tests: \(module.name)")
-        let result = try place.runBuilding(module.testCommand, module: module.path, in: repoRoot, timeout: testTimeout)
+        let key = try place.resultKey(
+            kind: "test", module: module.path, command: module.testCommand, checkout: checkout)
+        if place.results.hasPassed(key) {
+            reportCachedPass("Tests")
+            continue
+        }
+
+        let result = try place.runBuilding(
+            module.testCommand,
+            module: module.path,
+            in: checkout.root,
+            timeout: testTimeout,
+        )
         let outcome = diagnoseTestResult(result, moduleName: module.name, timeout: testTimeout)
 
         switch outcome {
             case .passed, .noOp:
-                continue
+                place.results.recordPass(key)
             case .timedOut, .failed:
                 throw ExitCode(1)
         }
     }
 }
 
-private func runModuleBuilds(modules: [DetectedModule], repoRoot: String, place: VerificationPlace) throws {
+private func runModuleBuilds(modules: [DetectedModule], checkout: Checkout, place: VerificationPlace) throws {
     let buildTimeout = timeoutFromEnv("GITHOOKS_BUILD_TIMEOUT_SECONDS", defaultSeconds: 600)
 
     for module in modules where !module.buildCommand.isEmpty {
         printSection("Build: \(module.name)")
+        let key = try place.resultKey(
+            kind: "build",
+            module: module.path,
+            command: module.buildCommand,
+            checkout: checkout,
+        )
+        if place.results.hasPassed(key) {
+            reportCachedPass("The build")
+            continue
+        }
+
         let result = try place.runBuilding(
-            module.buildCommand, module: module.path, in: repoRoot, timeout: buildTimeout)
+            module.buildCommand,
+            module: module.path,
+            in: checkout.root,
+            timeout: buildTimeout,
+        )
 
         if result.timedOut {
             printError("Build timed out after \(Int(buildTimeout))s for \(module.name).")
@@ -509,6 +570,7 @@ private func runModuleBuilds(modules: [DetectedModule], repoRoot: String, place:
         }
 
         printOK("Build succeeded for \(module.name).")
+        place.results.recordPass(key)
     }
 }
 

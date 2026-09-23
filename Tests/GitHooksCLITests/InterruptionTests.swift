@@ -42,8 +42,8 @@ struct InterruptionTests {
         try repository.installTool(
             "swiftlint",
             script: handshake.blockingScript.replacingOccurrences(
-                of: "#!/bin/sh\n",
-                with: "#!/bin/sh\necho \"$SCRIPT_INPUT_FILE_0\" > '\(inputs.path)'\n",
+                of: "echo $$",
+                with: "echo \"$SCRIPT_INPUT_FILE_0\" > '\(inputs.path)'\necho $$",
             ),
         )
         try repository.write(".swiftlint.yml", "only_rules:\n  - force_cast\n")
@@ -76,9 +76,16 @@ private struct Handshake {
         }
     }
 
-    /// A tool that reports its process identifier, then blocks until it is killed or released.
+    /// A tool that answers `--version` at once, and otherwise reports its process identifier, then blocks until it is
+    /// killed or released.
     var blockingScript: String {
-        "#!/bin/sh\necho $$ > '\(started)'\nread line < '\(hold)'\n"
+        """
+        #!/bin/sh
+        [ "$1" = "--version" ] && echo "fake 1.0" && exit 0
+        echo $$ > '\(started)'
+        read line < '\(hold)'
+
+        """
     }
 
     /// Block until the tool has started, and return its process identifier.

@@ -180,9 +180,18 @@ struct ScratchRepository {
         try git("config", "project-hooks.trusted", "true")
     }
 
-    /// Run the binary in the repository, with `stdin` as its standard input.
-    func runProjectHooks(_ arguments: [String], stdin: String? = nil) throws -> ProcessRun {
-        try runProcess([ProjectHooksBinary.path] + arguments, in: root, environment: environment, stdin: stdin)
+    /// Run the binary in the repository, with `stdin` as its standard input and `extraEnvironment` added.
+    func runProjectHooks(
+        _ arguments: [String],
+        stdin: String? = nil,
+        extraEnvironment: [String: String] = [:],
+    ) throws -> ProcessRun {
+        try runProcess(
+            [ProjectHooksBinary.path] + arguments,
+            in: root,
+            environment: environment.merging(extraEnvironment) { _, extra in extra },
+            stdin: stdin,
+        )
     }
 
     /// Start the binary in the repository without waiting for it, with `stdin` as its standard input.
@@ -204,11 +213,18 @@ struct ScratchRepository {
         return process
     }
 
-    /// Run the pre-push hook for pushing `localSHA` as a new `refs/heads/<branch>` on `origin`.
-    func runPrePush(branch: String = "main", localSHA: String, remoteSHA: String = Self.zeroSHA) throws -> ProcessRun {
+    /// Run the pre-push hook for pushing `localSHA` to `refs/heads/<branch>` on `origin`, as a new branch unless
+    /// `remoteSHA` says what the remote has.
+    func runPrePush(
+        branch: String = "main",
+        localSHA: String,
+        remoteSHA: String = Self.zeroSHA,
+        extraEnvironment: [String: String] = [:],
+    ) throws -> ProcessRun {
         try runProjectHooks(
             ["pre-push", "origin", "unused-url"],
             stdin: "refs/heads/\(branch) \(localSHA) refs/heads/\(branch) \(remoteSHA)\n",
+            extraEnvironment: extraEnvironment,
         )
     }
 
