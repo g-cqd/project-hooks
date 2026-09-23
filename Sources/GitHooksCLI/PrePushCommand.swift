@@ -18,11 +18,9 @@ struct PrePushCommand: ParsableCommand {
         let repoRoot = try gitRepoRoot()
         let resolved = try HooksConfig.resolve(repoRoot: repoRoot)
         let config = resolved?.config
-        let platform = ProjectDetector.detectPlatform(repoRoot: repoRoot)
         let trusted = try RepositoryTrust.isTrusted(repoRoot: repoRoot)
 
         printSection("Pre-push checks")
-        printInfo("Platform: \(platform.rawValue)")
         if let resolved { printInfo("Config: \(resolved.sourceDescription)") }
         printInfo("Remote: \(remoteName) (\(remoteURL))")
 
@@ -36,22 +34,17 @@ struct PrePushCommand: ParsableCommand {
         // --- Step 1b: Commit message validation (from config) ---
         try runCommitValidation(config: config, updates: updates, remoteName: remoteName, repoRoot: repoRoot)
 
-        // --- Step 2: Collect changed files ---
-        let changedFiles = try collectChangedFiles(
+        // --- Step 2: Collect the pushed commits and the files that each one changes ---
+        let commits = try collectPushedCommits(
             config: config,
             updates: updates,
             remoteName: remoteName,
             repoRoot: repoRoot,
         )
 
-        if changedFiles.isEmpty {
+        guard commits.contains(where: { !$0.files.isEmpty }) else {
             printOK("No source changes detected. Skipping checks.")
             return
-        }
-
-        printInfo("Detected changed files: \(changedFiles.count)")
-        for file in changedFiles {
-            print("  - \(file)")
         }
 
         // --- Step 2c: PR size check (config-driven) ---
@@ -62,31 +55,62 @@ struct PrePushCommand: ParsableCommand {
             repoRoot: repoRoot,
         )
 
-        // --- Step 3: Custom pre-push tasks ---
-        let tasks = config?.prePush.tasks ?? []
-        if trusted {
-            try runCustomTasks(tasks, files: changedFiles, repoRoot: repoRoot, blockMessage: "Push")
-        } else if !tasks.isEmpty {
-            RepositoryTrust.reportSkipped("\(tasks.count) custom task(s)")
-        }
-
-        // --- Step 4: Lint ---
-        let resolvedPlatform = resolveEffectivePlatform(changedFiles: changedFiles, detected: platform)
-        try runLintChecks(changedFiles: changedFiles, platform: resolvedPlatform, repoRoot: repoRoot, trusted: trusted)
-
-        // --- Step 5: Test + build ---
-        if trusted {
-            try runTestChecks(
-                config: config,
-                changedFiles: changedFiles,
-                platform: resolvedPlatform,
-                repoRoot: repoRoot,
-            )
-        } else if hasTests(config: config, changedFiles: changedFiles, platform: resolvedPlatform, repoRoot: repoRoot) {
-            RepositoryTrust.reportSkipped("tests and builds")
+        // --- Steps 3-5: Check each pushed commit as the push sends it, not the working tree ---
+        for commit in commits where !commit.files.isEmpty {
+            try check(commit, config: config, trusted: trusted, repoRoot: repoRoot)
         }
 
         printOK("pre-push checks completed successfully.")
+    }
+}
+
+// MARK: - Pushed commits
+
+/// A commit that the push sends, the branches or refs that it updates, and the files that it changes.
+private struct PushedCommit {
+    let sha: String
+    var refs: [String]
+    var files: [String]
+}
+
+/// Lint the commit's files from a snapshot of the commit.
+///
+/// In a trusted repository, also run the custom tasks, the builds and the tests in a worktree at the commit.
+private func check(_ commit: PushedCommit, config: HooksConfig?, trusted: Bool, repoRoot: String) throws {
+    printSection("Commit \(commit.sha.prefix(10)) (\(commit.refs.joined(separator: ", ")))")
+    printInfo("Changed files: \(commit.files.count)")
+    for file in commit.files {
+        print("  - \(file)")
+    }
+
+    // --- Step 3: Lint ---
+    let workingTreePlatform = ProjectDetector.detectPlatform(repoRoot: repoRoot)
+    let lintPlatform = resolveEffectivePlatform(changedFiles: commit.files, detected: workingTreePlatform)
+    try runLintChecks(commit: commit, platform: lintPlatform, repoRoot: repoRoot, trusted: trusted)
+
+    let tasks = config?.prePush.tasks ?? []
+    guard trusted else {
+        if !tasks.isEmpty {
+            RepositoryTrust.reportSkipped("\(tasks.count) custom task(s)")
+        }
+        if hasTests(config: config, changedFiles: commit.files, platform: lintPlatform, repoRoot: repoRoot) {
+            RepositoryTrust.reportSkipped("tests and builds")
+        }
+        return
+    }
+
+    let worktree = try VerificationWorktree.create(commit: commit.sha, repoRoot: repoRoot)
+    defer { worktree.remove(repoRoot: repoRoot) }
+    try worktree.inScope {
+        // --- Step 4: Custom pre-push tasks ---
+        try runCustomTasks(tasks, files: commit.files, repoRoot: worktree.path, blockMessage: "Push")
+
+        // --- Step 5: Test + build ---
+        let platform = resolveEffectivePlatform(
+            changedFiles: commit.files,
+            detected: ProjectDetector.detectPlatform(repoRoot: worktree.path),
+        )
+        try runTestChecks(config: config, changedFiles: commit.files, platform: platform, repoRoot: worktree.path)
     }
 }
 
@@ -196,7 +220,7 @@ private func resolveEffectivePlatform(changedFiles: [String], detected: Platform
     return effective != .unknown ? effective : detected
 }
 
-private func runLintChecks(changedFiles: [String], platform: Platform, repoRoot: String, trusted: Bool) throws {
+private func runLintChecks(commit: PushedCommit, platform: Platform, repoRoot: String, trusted: Bool) throws {
     let linters = discoverLinters(platform: platform, repoRoot: repoRoot, trusted: trusted)
 
     guard !linters.isEmpty else {
@@ -205,13 +229,12 @@ private func runLintChecks(changedFiles: [String], platform: Platform, repoRoot:
     }
 
     printInfo("Discovered linters: \(linters.map(\.name).joined(separator: ", "))")
+    let lintable = LinterDiscovery.filterFiles(commit.files, forPlatform: .mixed)
+    let snapshot = try IndexSnapshot.take(repoRoot: repoRoot, paths: lintable, commit: commit.sha)
+    defer { snapshot.remove() }
+    let workspace = LintWorkspace(snapshot: snapshot, repoRoot: repoRoot)
     for linter in linters {
-        try runLinterGrouped(
-            linter,
-            files: changedFiles,
-            workspace: LintWorkspace(repoRoot: repoRoot),
-            blockMessage: "Push",
-        )
+        try runLinterGrouped(linter, files: snapshot.files, workspace: workspace, blockMessage: "Push")
     }
 }
 
@@ -475,13 +498,17 @@ private func resolveCommitMessageExcludeBase(
     return nil
 }
 
-private func collectChangedFiles(
+/// The distinct commits that the push sends, in the order of the updates, each with the files that it changes relative
+/// to what the remote has.
+///
+/// Tags and deletions are skipped.
+private func collectPushedCommits(
     config: HooksConfig?,
     updates: [GitPushUpdate],
     remoteName: String,
     repoRoot: String,
-) throws -> [String] {
-    var files = Set<String>()
+) throws -> [PushedCommit] {
+    var commits: [PushedCommit] = []
 
     for update in updates {
         if HookLogic.shouldSkipUpdate(update) { continue }
@@ -491,25 +518,23 @@ private func collectChangedFiles(
 
         // Try work-scope first. Returns nil when scope is disabled or doesn't apply
         // (no config, base ref missing, pushing the base branch itself, etc.).
-        if let scoped = try collectScopedChangedFiles(
-            update: update,
-            workScope: config?.prePush.workScope,
-            repoRoot: repoRoot,
-        ) {
-            files.formUnion(scoped)
-            continue
-        }
-
-        // Fallback: original behavior.
-        try files.formUnion(
-            collectFallbackChangedFiles(
+        let files =
+            try collectScopedChangedFiles(
                 update: update,
-                remoteName: remoteName,
+                workScope: config?.prePush.workScope,
                 repoRoot: repoRoot,
-            ))
+            ) ?? collectFallbackChangedFiles(update: update, remoteName: remoteName, repoRoot: repoRoot)
+
+        let ref = BranchNameValidator.shortBranchName(fromRef: update.localRef)
+        if let index = commits.firstIndex(where: { $0.sha == update.localSHA }) {
+            commits[index].refs.append(ref)
+            commits[index].files = Set(commits[index].files).union(files).sorted()
+        } else {
+            commits.append(PushedCommit(sha: update.localSHA, refs: [ref], files: files.sorted()))
+        }
     }
 
-    return files.sorted()
+    return commits
 }
 
 /// Collect changed files using a configured work-scope baseline.

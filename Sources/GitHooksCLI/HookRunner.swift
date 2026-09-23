@@ -26,8 +26,17 @@ enum HookError: Error {
     case message(String)
 }
 
+/// Environment adjustments for the commands that run in the current scope.
+enum CommandScope {
+    /// Variables to remove from the environment of every command that runs in the current scope.
+    @TaskLocal static var removedVariables: Set<String> = []
+}
+
 func mergedEnvironment(_ overrides: [String: String]? = nil) -> [String: String] {
     var env = ProcessInfo.processInfo.environment
+    for key in CommandScope.removedVariables {
+        env.removeValue(forKey: key)
+    }
 
     let currentPath = EnvDiscovery.pathPreferringPackageManagers(env["PATH"] ?? "")
     var pathEntries = currentPath.split(separator: ":").map(String.init)
@@ -273,8 +282,13 @@ func gitRepoRoot() throws -> String {
     return result.stdoutText.trimmingCharacters(in: .whitespacesAndNewlines)
 }
 
-func gitNullSeparated(_ args: [String], repoRoot: String, allowFailure: Bool = false) throws -> [String] {
-    let result = try runCommand(["git"] + args, currentDirectory: repoRoot)
+func gitNullSeparated(
+    _ args: [String],
+    repoRoot: String,
+    allowFailure: Bool = false,
+    environment: [String: String]? = nil,
+) throws -> [String] {
+    let result = try runCommand(["git"] + args, currentDirectory: repoRoot, environment: environment)
     guard result.exitCode == 0 else {
         if allowFailure {
             return []
@@ -444,4 +458,15 @@ private func restageFiles(
             throw HookError.message("Failed to restage files: \(stderr)")
         }
     }
+}
+
+/// `path` with every symbolic link resolved, including `/var`, which `URL.resolvingSymlinksInPath()` deliberately
+/// leaves unresolved.
+///
+/// Returns `path` unchanged when it does not exist.
+func canonicalPath(_ path: String) -> String {
+    // `realpath` returns a buffer from `malloc`, or nil. The string copies it before the buffer is freed.
+    guard let resolved = realpath(path, nil) else { return path }
+    defer { free(resolved) }
+    return String(cString: resolved)
 }

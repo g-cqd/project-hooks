@@ -302,10 +302,11 @@ The same check is also available at commit time under `pre-commit.pr-size` (same
 
 1. **Parse push updates** from git's stdin protocol
 2. **Validate commit messages** against configured pattern and rejected trailers
-3. **Collect changed files** between local and remote refs
-4. **Run custom tasks** (same as pre-commit, trusted repositories only)
-5. **Run linters** (same as pre-commit)
-6. **Run tests** — either via `test-override` config or auto-detected per-module (trusted repositories only)
+3. **Collect changed files** between local and remote refs, for each distinct commit that the push sends
+4. **Run linters** on each pushed commit's changed files, as the commit holds them, whatever is checked out
+5. **Run custom tasks and tests** — either via `test-override` config or auto-detected per-module — in a temporary worktree at each pushed commit, which is removed afterwards (trusted repositories only)
+
+The worktree is a clean checkout of the commit, with its submodules: it has none of your uncommitted or untracked files.
 
 ### Platform detection
 
@@ -343,6 +344,9 @@ ProjectHooks
 │   ├── HooksConfig                 # YAML config parsing + multi-level resolution
 │   ├── ProjectDetector             # Platform detection
 │   ├── LinterDiscovery             # Linter discovery and resolution
+│   ├── SwiftFormatResolver         # swift-format from a toolchain, not PATH
+│   ├── LintConfiguration           # Lint configuration files and SwiftLint includes
+│   ├── LintOutcome                 # Linter exit-code classification
 │   ├── HookLogic                   # Git push parsing, test bundle selection
 │   ├── HookInstaller               # Hook script generation, installation, repair
 │   ├── GitDirectoryLocator         # Finds repositories to repair
@@ -358,6 +362,8 @@ ProjectHooks
     ├── PrePushCommand               # pre-push hook implementation
     ├── InstallCommand, RepairCommand # Hook installation and repair
     ├── TrustCommand, RepositoryTrust # Per-repository trust opt-in
+    ├── IndexSnapshot, LintWorkspace  # Private copies of staged or pushed files for linting
+    ├── VerificationWorktree         # Worktree at a pushed commit for its tasks and tests
     ├── HookRunner                   # Process execution, git helpers
     ├── LinterRunner                 # Linter invocation
     └── TestDiagnostics              # Test failure reporting

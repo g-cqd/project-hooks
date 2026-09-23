@@ -1,5 +1,7 @@
 import Foundation
 
+@testable import GitHooksCLI
+
 /// A throwaway git repository for end-to-end tests of the `project-hooks` binary.
 ///
 /// Git runs with no user or system configuration and a fixed identity. The binary gets its own cache directory, and a
@@ -47,9 +49,9 @@ struct ScratchRepository {
     /// Create a repository on branch `main`, with one commit that adds an empty `.project-hooks.yml`.
     static func make(_ name: String = #function) throws -> ScratchRepository {
         let label = name.filter { $0.isLetter || $0.isNumber }.prefix(40)
-        let scratch = FileManager.default.temporaryDirectory
+        // Canonical, like the paths that git reports.
+        let scratch = URL(fileURLWithPath: canonicalPath(FileManager.default.temporaryDirectory.path))
             .appendingPathComponent("project-hooks-e2e-\(label)-\(UUID().uuidString.prefix(8))")
-            .resolvingSymlinksInPath()
         let repository = ScratchRepository(scratch: scratch, root: scratch.appendingPathComponent("repo"))
         try FileManager.default.createDirectory(at: repository.root, withIntermediateDirectories: true)
         try FileManager.default.createDirectory(at: repository.fakeTools, withIntermediateDirectories: true)
@@ -80,6 +82,11 @@ struct ScratchRepository {
         FileManager.default.fileExists(atPath: root.appendingPathComponent(relativePath).path)
     }
 
+    /// Whether `name` exists in the scratch directory, outside the repository.
+    func scratchExists(_ name: String) -> Bool {
+        FileManager.default.fileExists(atPath: scratch.appendingPathComponent(name).path)
+    }
+
     /// Install an executable script called `name` in the fake tools directory.
     func installTool(_ name: String, script: String) throws {
         let url = fakeTools.appendingPathComponent(name)
@@ -99,9 +106,26 @@ struct ScratchRepository {
         return run.output.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    /// Run git in the repository and return its exit status and output, whether or not it succeeds.
-    func gitRun(_ arguments: String...) throws -> ProcessRun {
-        try runProcess(["git"] + arguments, in: root, environment: environment)
+    /// Run git in the repository, or in `directory`, and return its exit status and output, whether or not it
+    /// succeeds.
+    @discardableResult
+    func gitRun(_ arguments: String..., in directory: URL? = nil) throws -> ProcessRun {
+        try runProcess(["git"] + arguments, in: directory ?? root, environment: environment)
+    }
+
+    /// Add a bare repository in the scratch directory as the `origin` remote.
+    func addOrigin() throws {
+        let remote = scratch.appendingPathComponent("origin.git")
+        _ = try runProcess(["git", "init", "-q", "--bare", remote.path], in: scratch, environment: environment)
+        try git("remote", "add", "origin", remote.path)
+    }
+
+    /// The paths of the repository's worktrees, as `git worktree list` reports them.
+    func worktreePaths() throws -> [String] {
+        try git("worktree", "list", "--porcelain")
+            .split(separator: "\n")
+            .filter { $0.hasPrefix("worktree ") }
+            .map { String($0.dropFirst("worktree ".count)) }
     }
 
     /// Install the binary under test as the repository's `pre-commit` and `pre-push` hooks.
