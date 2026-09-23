@@ -259,30 +259,37 @@ func runLinterGrouped(
             print("  - \(file)")
         }
 
-        let outcome = try runLinterCommand(
-            linter: linter,
-            files: pending.map(\.0),
-            config: group.config,
-            workspace: workspace,
-            timeout: timeout,
-        )
+        // Some linters take one argument per file, and a command cannot have more than 4096.
+        var groupPassed = true
+        for chunk in pending.chunked(into: maxArgumentsPerCommand) {
+            let outcome = try runLinterCommand(
+                linter: linter,
+                files: chunk.map(\.0),
+                config: group.config,
+                workspace: workspace,
+                timeout: timeout,
+            )
 
-        switch outcome {
-            case .passed:
-                printOK("\(linter.name) checks passed.")
-            case .allFilesExcluded:
-                printOK("\(linter.name) configuration excludes these files. Nothing to lint.")
-            case .violations:
-                printError("\(linter.name) reported violations.")
-            case .failed(let exitCode):
-                printError("\(linter.name) failed to run (exit \(exitCode)). Its output is above.")
-            case .timedOut:
-                break
+            switch outcome {
+                case .passed:
+                    printOK("\(linter.name) checks passed.")
+                case .allFilesExcluded:
+                    printOK("\(linter.name) configuration excludes these files. Nothing to lint.")
+                case .violations:
+                    printError("\(linter.name) reported violations.")
+                case .failed(let exitCode):
+                    printError("\(linter.name) failed to run (exit \(exitCode)). Its output is above.")
+                case .timedOut:
+                    break
+            }
+
+            if outcome.passes {
+                ledger.store.recordPasses(chunk.compactMap(\.1))
+            } else {
+                groupPassed = false
+            }
         }
-
-        if outcome.passes {
-            ledger.store.recordPasses(pending.compactMap(\.1))
-        } else {
+        if !groupPassed {
             failures.append("\(linter.name) (\(configLabel))")
         }
     }
