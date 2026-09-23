@@ -118,10 +118,10 @@ Prints the current version.
 
 `project-hooks install` writes `pre-commit` and `pre-push` scripts that locate the `project-hooks` binary and delegate to it. Generated hooks search in this order:
 
-1. `<repoRoot>/.build/release/project-hooks`
-2. The binary path embedded at install time
-3. `~/.local/bin/project-hooks`
-4. System `PATH`
+1. The binary path embedded at install time
+2. `~/.local/bin/project-hooks`
+
+The hooks never look inside the repository or on `PATH`. Git does not run hooks that a repository ships, and a cloned repository must not be able to choose the binary that these hooks run either. If neither path holds an executable, the hook fails.
 
 The install command resolves hook directories through Git, so normal repositories, worktrees, and submodules use the correct hooks path.
 
