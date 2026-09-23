@@ -140,9 +140,13 @@ private enum WaitOutcome {
 /// A process that runs past its deadline, or that an interruption stops, is terminated with its whole process tree:
 /// gracefully first, then forcibly.
 private func waitForProcess(_ process: Process, deadline: Date, interruptible: Bool) -> WaitOutcome {
+    // Most commands, such as git's, finish within milliseconds: check often at first, then back off, so that a long
+    // build costs at most ten wakeups a second.
+    var interval = 0.001
     while process.isRunning, Date() < deadline {
         if interruptible, Interruption.signal != nil { break }
-        Thread.sleep(forTimeInterval: 0.5)
+        Thread.sleep(forTimeInterval: interval)
+        interval = min(interval * 2, 0.1)
     }
 
     guard process.isRunning else {
@@ -236,17 +240,9 @@ func runCommand(
 
     try process.run()
 
-    let didTimeout: Bool
-    if let timeoutSeconds {
-        // Explicit timeout: poll with deadline
-        let deadline = Date().addingTimeInterval(timeoutSeconds)
-        didTimeout = waitForProcess(process, deadline: deadline, interruptible: interruptible) == .timedOut
-    } else {
-        // No explicit timeout: block directly (no polling overhead for fast commands)
-        // Safety net: 1-hour max to prevent infinite hangs
-        let deadline = Date().addingTimeInterval(3600)
-        didTimeout = waitForProcess(process, deadline: deadline, interruptible: interruptible) == .timedOut
-    }
+    // Without an explicit timeout, one hour is the safety net against a command that never ends.
+    let deadline = Date().addingTimeInterval(timeoutSeconds ?? 3600)
+    let didTimeout = waitForProcess(process, deadline: deadline, interruptible: interruptible) == .timedOut
 
     try? stdoutHandle.close()
     try? stderrHandle.close()
