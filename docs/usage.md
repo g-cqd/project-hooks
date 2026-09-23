@@ -220,6 +220,10 @@ The hook prints the binary it runs, its version, and why it fell back when it di
 
 Files are grouped by their closest config file (walking up the directory tree). This means monorepos with multiple linter configs are handled correctly. Every linter requires a config: it lints the files that a config covers, wherever that config is (for example only in `Packages/Kit/`), and skips the others with a note.
 
+Every group runs, even after one fails, and the hook then blocks once with the list of groups that did not pass.
+
+project-hooks remembers which files each linter passed, in `~/Library/Caches/project-hooks/lint`, keyed by the linter's binary, every lint configuration file in the repository, and the file's path and content. Pre-push therefore skips the files that the commit hook already linted, and a commit retried after a lint failure lints only the groups that failed. Changing any of those inputs lints the file again. A configuration that SwiftLint downloads, or reads from outside the repository, is not part of the key: set `GITHOOKS_NO_CACHE=1` to lint everything.
+
 ## Test targeting
 
 ### Auto-detection (no config)
@@ -252,7 +256,7 @@ If any changed file matches a `broad-impact-paths` prefix, all bundles run.
 | `GITHOOKS_<LINTER>_TIMEOUT_SECONDS` | `120` | Per-linter timeout. Replace `<LINTER>` with the uppercase linter name (e.g. `GITHOOKS_SWIFTLINT_TIMEOUT_SECONDS`) |
 | `GITHOOKS_CACHE_DIR` | `~/Library/Caches/project-hooks` | Where build directories, verification worktrees and locks live between runs |
 | `GITHOOKS_BUILD_CACHE_LIMIT_GB` | `10` | Total size of the build directories kept between pushes |
-| `GITHOOKS_NO_CACHE` | unset | Set to `1` to run tests and builds even when they passed on the same tree before |
+| `GITHOOKS_NO_CACHE` | unset | Set to `1` to run linters, tests and builds even on content that passed before |
 
 ## Timeouts and process management
 

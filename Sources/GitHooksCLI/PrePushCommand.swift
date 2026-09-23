@@ -73,8 +73,18 @@ struct PrePushCommand: ParsableCommand {
                 printInfo("Waiting for another project-hooks run in this repository to finish...")
             }
         }
-        for commit in commits where !commit.files.isEmpty {
-            try check(commit, config: config, place: place, repoRoot: repoRoot)
+        let changed = commits.filter { !$0.files.isEmpty }
+
+        // --- Step 3: Lint every pushed commit, and report every failure, before the slower steps ---
+        var failures: [String] = []
+        for commit in changed {
+            failures += try lint(commit, trusted: place != nil, repoRoot: repoRoot)
+        }
+        try blockOnLintFailures(failures, blockMessage: "Push")
+
+        // --- Steps 4-5: Custom tasks, tests and builds ---
+        for commit in changed {
+            try runTasksAndTests(for: commit, config: config, place: place, repoRoot: repoRoot)
         }
         _ = consume lock
 
@@ -159,32 +169,46 @@ private func reportCachedPass(_ what: String) {
 }
 
 /// Lint the commit's files from a snapshot of the commit.
-///
-/// In a trusted repository, which has a `place`, also run the custom tasks, the builds and the tests in a worktree at
-/// the commit.
-private func check(_ commit: PushedCommit, config: HooksConfig?, place: VerificationPlace?, repoRoot: String) throws {
+/// - Returns: A label for each lint group that did not pass.
+private func lint(_ commit: PushedCommit, trusted: Bool, repoRoot: String) throws -> [String] {
     printSection("Commit \(commit.sha.prefix(10)) (\(commit.refs.joined(separator: ", ")))")
     printInfo("Changed files: \(commit.files.count)")
     for file in commit.files {
         print("  - \(file)")
     }
 
-    // --- Step 3: Lint ---
     let workingTreePlatform = ProjectDetector.detectPlatform(repoRoot: repoRoot)
-    let lintPlatform = resolveEffectivePlatform(changedFiles: commit.files, detected: workingTreePlatform)
-    try runLintChecks(commit: commit, platform: lintPlatform, repoRoot: repoRoot, trusted: place != nil)
+    let platform = resolveEffectivePlatform(changedFiles: commit.files, detected: workingTreePlatform)
+    let failures = try runLintChecks(commit: commit, platform: platform, repoRoot: repoRoot, trusted: trusted)
+    return failures.map { "\($0) in \(commit.sha.prefix(10))" }
+}
 
+/// In a trusted repository, which has a `place`, run the custom tasks, the builds and the tests in a worktree at the
+/// commit.
+///
+/// In an untrusted one, say what did not run.
+private func runTasksAndTests(
+    for commit: PushedCommit,
+    config: HooksConfig?,
+    place: VerificationPlace?,
+    repoRoot: String,
+) throws {
     let tasks = config?.prePush.tasks ?? []
     guard let place else {
+        let platform = resolveEffectivePlatform(
+            changedFiles: commit.files,
+            detected: ProjectDetector.detectPlatform(repoRoot: repoRoot),
+        )
         if !tasks.isEmpty {
             RepositoryTrust.reportSkipped("\(tasks.count) custom task(s)")
         }
-        if hasTests(config: config, changedFiles: commit.files, platform: lintPlatform, repoRoot: repoRoot) {
+        if hasTests(config: config, changedFiles: commit.files, platform: platform, repoRoot: repoRoot) {
             RepositoryTrust.reportSkipped("tests and builds")
         }
         return
     }
 
+    printSection("Tasks and tests: commit \(commit.sha.prefix(10)) (\(commit.refs.joined(separator: ", ")))")
     let worktree = try VerificationWorktree.create(commit: commit.sha, repoRoot: repoRoot, path: place.worktreePath)
     defer { worktree.remove(repoRoot: repoRoot) }
     let tree = try gitFirstLine(["rev-parse", "\(commit.sha)^{tree}"], repoRoot: repoRoot) ?? commit.sha
@@ -314,12 +338,17 @@ private func resolveEffectivePlatform(changedFiles: [String], detected: Platform
     return effective != .unknown ? effective : detected
 }
 
-private func runLintChecks(commit: PushedCommit, platform: Platform, repoRoot: String, trusted: Bool) throws {
+private func runLintChecks(
+    commit: PushedCommit,
+    platform: Platform,
+    repoRoot: String,
+    trusted: Bool,
+) throws -> [String] {
     let linters = discoverLinters(platform: platform, repoRoot: repoRoot, trusted: trusted)
 
     guard !linters.isEmpty else {
         printWarn("No linters found. Skipping lint checks.")
-        return
+        return []
     }
 
     printInfo("Discovered linters: \(linters.map(\.name).joined(separator: ", "))")
@@ -327,9 +356,11 @@ private func runLintChecks(commit: PushedCommit, platform: Platform, repoRoot: S
     let snapshot = try IndexSnapshot.take(repoRoot: repoRoot, paths: lintable, commit: commit.sha)
     defer { snapshot.remove() }
     let workspace = LintWorkspace(snapshot: snapshot, repoRoot: repoRoot)
+    var failures: [String] = []
     for linter in linters {
-        try runLinterGrouped(linter, files: snapshot.files, workspace: workspace, blockMessage: "Push")
+        failures += try runLinterGrouped(linter, files: snapshot.files, workspace: workspace, ledger: .standard())
     }
+    return failures
 }
 
 // MARK: - Test + build

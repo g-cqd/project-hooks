@@ -184,26 +184,28 @@ private func describe(_ linter: DiscoveredLinter) -> String {
 
 // MARK: - Grouped linter execution
 
-/// Run a linter against files grouped by their closest config file.
+/// Run a linter against files grouped by their closest config file, and report every group's outcome.
 ///
 /// Used by both pre-commit and pre-push commands.
 /// - Parameters:
 ///   - linter: The linter to run.
 ///   - files: Repository-relative paths. The linter reads them, and their configuration, from `workspace.root`.
 ///   - workspace: Where the linter reads the files, and which paths its output names instead.
-///   - blockMessage: The operation that a failure blocks, such as "Commit".
-/// - Throws: `ExitCode(1)` when a group does not pass, or an error when the linter cannot start.
+///   - ledger: Files that passed before with the same content and configuration are skipped, and files that pass are
+///     recorded.
+/// - Returns: A label for each group that did not pass, empty when all passed.
+/// - Throws: When a linter cannot start.
 func runLinterGrouped(
     _ linter: DiscoveredLinter,
     files: [String],
     workspace: LintWorkspace,
-    blockMessage: String,
-) throws {
+    ledger: LintLedger,
+) throws -> [String] {
     let relevantFiles = LinterDiscovery.filterFiles(files, forPlatform: linter.platform)
 
     guard !relevantFiles.isEmpty else {
         printOK("No \(linter.platform.rawValue) files to lint. Skipping \(linter.name).")
-        return
+        return []
     }
 
     // A linter that requires a configuration lints each file that a configuration covers, wherever that
@@ -218,12 +220,14 @@ func runLinterGrouped(
     if uncovered > 0 {
         printOK("No \(linter.name) config covers \(uncovered) file(s). Skipping them.")
     }
-    guard !groups.isEmpty else { return }
+    guard !groups.isEmpty else { return [] }
 
     printInfo(describe(linter))
 
     let envKey = "GITHOOKS_\(linter.name.uppercased().replacingOccurrences(of: "-", with: "_"))_TIMEOUT_SECONDS"
     let timeout = timeoutFromEnv(envKey, defaultSeconds: 120)
+    let identity = LintLedger.identity(of: linter)
+    var failures: [String] = []
 
     for group in groups {
         // Show config path relative to repo root for clarity
@@ -241,13 +245,23 @@ func runLinterGrouped(
             printInfo("Config: \(workspace.repositoryPaths(in: config))")
         }
 
-        for file in group.files {
+        let keys = group.files
+            .map { ledger.key(for: $0, linter: linter, linterIdentity: identity, workspace: workspace) }
+        let pending = zip(group.files, keys).filter { _, key in key.map { !ledger.store.hasPassed($0) } ?? true }
+        if pending.count < group.files.count {
+            printOK(
+                "\(group.files.count - pending.count) file(s) passed \(linter.name) before, "
+                    + "with the same content and configuration. Skipping them.")
+        }
+        guard !pending.isEmpty else { continue }
+
+        for (file, _) in pending {
             print("  - \(file)")
         }
 
         let outcome = try runLinterCommand(
             linter: linter,
-            files: group.files,
+            files: pending.map(\.0),
             config: group.config,
             workspace: workspace,
             timeout: timeout,
@@ -266,9 +280,24 @@ func runLinterGrouped(
                 break
         }
 
-        guard outcome.passes else {
-            printWarn("\(blockMessage) blocked. Fix issues and try again.")
-            throw ExitCode(1)
+        if outcome.passes {
+            ledger.store.recordPasses(pending.compactMap(\.1))
+        } else {
+            failures.append("\(linter.name) (\(configLabel))")
         }
     }
+
+    return failures
+}
+
+/// Block the commit or push when any linter group failed, naming each one.
+func blockOnLintFailures(_ failures: [String], blockMessage: String) throws {
+    guard !failures.isEmpty else { return }
+    printSection("Lint results")
+    printError("\(failures.count) lint group(s) did not pass:")
+    for failure in failures {
+        print("  - \(failure)")
+    }
+    printWarn("\(blockMessage) blocked. Fix issues and try again.")
+    throw ExitCode(1)
 }

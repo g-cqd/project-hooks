@@ -12,6 +12,10 @@ struct IndexSnapshot {
     let root: String
     /// The requested paths that the index holds, and that the snapshot therefore contains.
     private(set) var files: [String] = []
+    /// The blob hash of each file and lint configuration file in the snapshot, by repository-relative path.
+    private(set) var blobs: [String: String] = [:]
+    /// A digest of every lint configuration file in the snapshot, and of its content.
+    private(set) var configurationDigest = ""
     /// The environment for git commands that read the snapshot's index.
     ///
     /// Nil for the repository's own index.
@@ -67,7 +71,12 @@ struct IndexSnapshot {
             let pathspecs = LintConfiguration.fileNames.sorted().map { ":(glob)**/\($0)" }
             let configurations = try snapshot.git(["ls-files", "-z", "--cached", "--"] + pathspecs, repoRoot: repoRoot)
             try snapshot.checkOut(snapshot.files + configurations, repoRoot: repoRoot)
-            try snapshot.checkOutSwiftLintIncludes(of: configurations, repoRoot: repoRoot)
+            let includes = try snapshot.checkOutSwiftLintIncludes(of: configurations, repoRoot: repoRoot)
+            try snapshot.recordBlobs(
+                files: snapshot.files,
+                configurations: configurations + includes,
+                repoRoot: repoRoot,
+            )
         } catch {
             snapshot.remove()
             throw error
@@ -99,12 +108,26 @@ struct IndexSnapshot {
         }
     }
 
+    private mutating func recordBlobs(files: [String], configurations: [String], repoRoot: String) throws {
+        let paths = files + configurations
+        guard !paths.isEmpty else { return }
+        // Each entry reads "<mode> <blob> <stage>\t<path>".
+        for entry in try git(["ls-files", "-s", "-z", "--"] + paths.map { ":(literal)\($0)" }, repoRoot: repoRoot) {
+            let parts = entry.split(separator: "\t", maxSplits: 1)
+            guard parts.count == 2, let blob = parts[0].split(separator: " ").dropFirst().first else { continue }
+            blobs[String(parts[1])] = String(blob)
+        }
+        configurationDigest = HookCache.digest(configurations.sorted().flatMap { [$0, blobs[$0] ?? ""] })
+    }
+
     /// Copy the files that the copied SwiftLint configurations include, so that SwiftLint does not fall back to its
     /// default rules when an included configuration is missing.
-    private func checkOutSwiftLintIncludes(of configurations: [String], repoRoot: String) throws {
+    /// - Returns: The included files that the snapshot now contains.
+    private func checkOutSwiftLintIncludes(of configurations: [String], repoRoot: String) throws -> [String] {
         let swiftLintNames: Set = [".swiftlint.yml", ".swiftlint.yaml"]
         var pending = configurations.filter { swiftLintNames.contains(URL(fileURLWithPath: $0).lastPathComponent) }
         var seen = Set(configurations)
+        var copied: [String] = []
 
         for _ in 0..<Self.maxSwiftLintIncludeDepth where !pending.isEmpty {
             var included: [String] = []
@@ -119,15 +142,17 @@ struct IndexSnapshot {
                     included.append(path)
                 }
             }
-            guard !included.isEmpty else { return }
+            guard !included.isEmpty else { break }
             // Only files that the index holds can be copied from it.
             let indexed = try git(
                 ["ls-files", "-z", "--cached", "--"] + included.map { ":(literal)\($0)" },
                 repoRoot: repoRoot,
             )
             try checkOut(indexed, repoRoot: repoRoot)
+            copied += indexed
             pending = indexed
         }
+        return copied
     }
 
     /// The repository-relative path that `reference`, relative to `directory`, designates, or nil when the reference is

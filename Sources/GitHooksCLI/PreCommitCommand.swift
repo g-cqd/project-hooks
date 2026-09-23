@@ -63,9 +63,16 @@ struct PreCommitCommand: ParsableCommand {
             let snapshot = try IndexSnapshot.take(repoRoot: repoRoot, paths: lintable)
             defer { snapshot.remove() }
             let workspace = LintWorkspace(snapshot: snapshot, repoRoot: repoRoot)
+            var failures: [String] = []
             for linter in linters {
-                try runLinterGrouped(linter, files: snapshot.files, workspace: workspace, blockMessage: "Commit")
+                failures += try runLinterGrouped(
+                    linter,
+                    files: snapshot.files,
+                    workspace: workspace,
+                    ledger: .standard(),
+                )
             }
+            try blockOnLintFailures(failures, blockMessage: "Commit")
         }
 
         printOK("pre-commit checks completed successfully.")
