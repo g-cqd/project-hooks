@@ -21,7 +21,7 @@ struct InstallCommand: ParsableCommand {
     var path: String?
 
     func run() throws {
-        let binaryPath = URL(fileURLWithPath: ProcessInfo.processInfo.arguments[0]).standardized.path
+        let binaryPath = runningBinaryPath()
 
         if global {
             try installGlobal(binaryPath: binaryPath)
@@ -107,4 +107,9 @@ struct InstallCommand: ParsableCommand {
         let data = pipe.fileHandleForReading.readDataToEndOfFile()
         return (String(data: data, encoding: .utf8) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
     }
+}
+
+/// The absolute path of this binary, which generated hooks embed.
+func runningBinaryPath() -> String {
+    URL(fileURLWithPath: ProcessInfo.processInfo.arguments[0]).standardized.path
 }

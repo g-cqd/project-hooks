@@ -34,7 +34,7 @@ struct HookInstallerTests {
     func `hook never runs a binary that the repository ships`() throws {
         let tmpDir = try makeTempDir(prefix: "install-shipped-binary")
         defer { try? FileManager.default.removeItem(at: tmpDir) }
-        #expect(try runProcess("git", args: ["init", "-q", tmpDir.path], environment: hermeticEnvironment) == 0)
+        #expect(try runProcess("git", args: ["init", "-q", tmpDir.path], environment: hermeticGitEnvironment) == 0)
 
         // A cloned repository can commit an executable wherever earlier hook scripts searched.
         for shippedPath in [".build/release/project-hooks", "project-hooks"] {
@@ -58,7 +58,7 @@ struct HookInstallerTests {
     func `hook fails rather than search PATH when the installed binary is missing`() throws {
         let tmpDir = try makeTempDir(prefix: "install-missing-binary")
         defer { try? FileManager.default.removeItem(at: tmpDir) }
-        #expect(try runProcess("git", args: ["init", "-q", tmpDir.path], environment: hermeticEnvironment) == 0)
+        #expect(try runProcess("git", args: ["init", "-q", tmpDir.path], environment: hermeticGitEnvironment) == 0)
 
         try writeMarkerScript(at: tmpDir.appendingPathComponent("project-hooks"), marker: "shipped-binary-ran")
         let missing = tmpDir.appendingPathComponent("uninstalled/project-hooks").path
@@ -250,14 +250,6 @@ struct HookInstallerTests {
 
 // MARK: - Test helpers
 
-/// This process's environment without the user's git configuration or any inherited `GIT_*` variable.
-private let hermeticEnvironment: [String: String] = {
-    var environment = ProcessInfo.processInfo.environment.filter { !$0.key.hasPrefix("GIT_") }
-    environment["GIT_CONFIG_GLOBAL"] = "/dev/null"
-    environment["GIT_CONFIG_NOSYSTEM"] = "1"
-    return environment
-}()
-
 private func runProcess(
     _ executable: String,
     args: [String],
@@ -279,7 +271,7 @@ private func runProcess(
 /// Run an installed hook the way git does, from the repository root, with `.` first on `PATH` and a home
 /// directory that has no project-hooks binary.
 private func runHook(_ name: String, in repository: URL) throws -> Int32 {
-    var environment = hermeticEnvironment
+    var environment = hermeticGitEnvironment
     environment["PATH"] = ".:/usr/bin:/bin"
     environment["HOME"] = repository.appendingPathComponent("empty-home").path
     return try runProcess(

@@ -110,6 +110,18 @@ project-hooks check-localization --include-previews Sources/
 
 **Exit codes:** `0` if no issues, `1` if one or more issues are found.
 
+### `project-hooks repair [<directory>...]`
+
+Rewrites the `pre-commit` and `pre-push` hooks that project-hooks generated, so that they run this binary. Git copies hooks into each repository at clone time, so repositories created before an update keep their old hooks until you repair them.
+
+| Option | Description |
+|---|---|
+| `<directory>...` | Directories to search for repositories. Without one, the current repository. |
+| `--max-depth <n>` | How many directory levels below each directory to search (default: 4). |
+| `--dry-run` | Report what would change without writing anything. |
+
+It finds repositories, their linked worktrees, and their submodules by reading `.git` entries, without running git in them, and skips build directories such as `.build` and `DerivedData`. Hooks from other tools stay unchanged, and running the command again changes nothing.
+
 ### `project-hooks --version`
 
 Prints the current version.

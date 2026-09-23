@@ -15,6 +15,7 @@ struct GitHooksCLI: ParsableCommand {
             PreCommitCommand.self,
             PrePushCommand.self,
             InstallCommand.self,
+            RepairCommand.self,
             CheckLocalizationCommand.self,
         ],
     )
