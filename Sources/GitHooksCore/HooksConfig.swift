@@ -38,6 +38,11 @@ public struct HooksConfig: Equatable {
         public var workScope: WorkScopeConfig?
         public var rejectTrailers: [String]
         public var testOverride: TestOverride?
+        /// Why `test-override` was ignored, when it was present but unusable.
+        ///
+        /// `nil` when the block is absent or valid. Surfaced by `pre-push` so a bad
+        /// block cannot silently fall back to auto-detected tests.
+        public var testOverrideIssue: String?
         public var prSize: PRSizeConfig?
         public var tasks: [CustomTask]
 
@@ -47,6 +52,7 @@ public struct HooksConfig: Equatable {
             workScope: WorkScopeConfig? = nil,
             rejectTrailers: [String] = [],
             testOverride: TestOverride? = nil,
+            testOverrideIssue: String? = nil,
             prSize: PRSizeConfig? = nil,
             tasks: [CustomTask] = [],
         ) {
@@ -55,6 +61,7 @@ public struct HooksConfig: Equatable {
             self.workScope = workScope
             self.rejectTrailers = rejectTrailers
             self.testOverride = testOverride
+            self.testOverrideIssue = testOverrideIssue
             self.prSize = prSize
             self.tasks = tasks
         }
@@ -522,7 +529,7 @@ extension HooksConfig {
         let branchName = parseBranchName(dict["branch-name"] as? [String: Any])
         let workScope = parseWorkScope(dict["work-scope"] as? [String: Any])
         let rejectTrailers = dict["reject-trailers"] as? [String] ?? []
-        let testOverride = parseTestOverride(dict["test-override"] as? [String: Any])
+        let (testOverride, testOverrideIssue) = parseTestOverride(dict["test-override"] as? [String: Any])
         let prSize = parsePRSize(dict["pr-size"] as? [String: Any])
 
         let tasks = parseTasks(dict["tasks"] as? [[String: Any]])
@@ -533,6 +540,7 @@ extension HooksConfig {
             workScope: workScope,
             rejectTrailers: rejectTrailers,
             testOverride: testOverride,
+            testOverrideIssue: testOverrideIssue,
             prSize: prSize,
             tasks: tasks,
         )
@@ -685,8 +693,14 @@ extension HooksConfig {
         return fallback
     }
 
-    private static func parseTestOverride(_ dict: [String: Any]?) -> TestOverride? {
-        guard let dict else { return nil }
+    /// Parses `test-override`, returning the override and, when the block is present
+    /// but unusable, a human-readable reason it was ignored.
+    ///
+    /// An unusable block used to be dropped silently (or with a bare `print` for an
+    /// unknown type), so the hook fell back to auto-detected tests and nobody noticed
+    /// that the configured runner was not the one running.
+    private static func parseTestOverride(_ dict: [String: Any]?) -> (TestOverride?, String?) {
+        guard let dict else { return (nil, nil) }
         let skip = dict["skip"] as? Bool ?? false
         // `type` is required by the schema, but irrelevant when skip=true. Accept the
         // shorthand `test-override: { skip: true }` (no type) for ergonomics — the engine
@@ -695,18 +709,23 @@ extension HooksConfig {
         let runnerType: TestRunnerType
         if let typeString {
             guard let parsed = TestRunnerType(rawValue: typeString) else {
-                print("[WARN] Unknown test-override type '\(typeString)'. Valid: xcodebuild, swift, gradle.")
-                return nil
+                return (
+                    nil,
+                    "Unknown test-override type '\(typeString)'. Valid: xcodebuild, swift, gradle."
+                )
             }
             runnerType = parsed
         } else if skip {
             // Placeholder; ignored at runtime when skip=true.
             runnerType = .swift
         } else {
-            // No type and not skipping → invalid config; behave as before.
-            return nil
+            return (
+                nil,
+                "test-override has no `type` and `skip` is not true, so it was ignored. "
+                    + "Set `type: xcodebuild | swift | gradle`, or `skip: true` to disable the test stage."
+            )
         }
-        return TestOverride(
+        let override = TestOverride(
             type: runnerType,
             project: dict["project"] as? String,
             scheme: dict["scheme"] as? String,
@@ -717,6 +736,7 @@ extension HooksConfig {
             extraArgs: dict["extra-args"] as? [String],
             skip: skip,
         )
+        return (override, nil)
     }
 
     private static func parseTasks(_ array: [[String: Any]]?) -> [CustomTask] {
