@@ -393,6 +393,61 @@ struct HooksConfigTests {
     }
 
     @Test
+    func `test-override without a type and without skip is reported, not silently dropped`() throws {
+        // The shape that shipped in a real repo: the runner block was deleted and only
+        // `skip: false` remained, so pre-push quietly fell back to auto-detected tests.
+        let yaml = """
+            pre-push:
+              test-override:
+                skip: false
+            """
+        let config = try HooksConfig.parse(yaml: yaml)
+
+        #expect(config.prePush.testOverride == nil)
+        let issue = try #require(config.prePush.testOverrideIssue)
+        #expect(issue.contains("type"))
+    }
+
+    @Test
+    func `test-override with an unknown type is reported with the offending value`() throws {
+        let yaml = """
+            pre-push:
+              test-override:
+                type: xcodebuidl
+            """
+        let config = try HooksConfig.parse(yaml: yaml)
+
+        #expect(config.prePush.testOverride == nil)
+        let issue = try #require(config.prePush.testOverrideIssue)
+        #expect(issue.contains("xcodebuidl"))
+    }
+
+    @Test
+    func `valid and skipped test-override blocks report no issue`() throws {
+        let valid = try HooksConfig.parse(
+            yaml: """
+                pre-push:
+                  test-override:
+                    type: xcodebuild
+                    scheme: App
+                """)
+        #expect(valid.prePush.testOverride != nil)
+        #expect(valid.prePush.testOverrideIssue == nil)
+
+        let skipped = try HooksConfig.parse(
+            yaml: """
+                pre-push:
+                  test-override:
+                    skip: true
+                """)
+        #expect(skipped.prePush.testOverride?.skip == true)
+        #expect(skipped.prePush.testOverrideIssue == nil)
+
+        let absent = try HooksConfig.parse(yaml: "pre-push:\n  reject-trailers: []\n")
+        #expect(absent.prePush.testOverrideIssue == nil)
+    }
+
+    @Test
     func `parse extra-args on test override`() throws {
         let yaml = """
             pre-push:

@@ -383,6 +383,11 @@ private func runTestChecks(
     checkout: Checkout,
     place: VerificationPlace,
 ) throws {
+    // A present-but-unusable `test-override` must not fall back to auto-detection unnoticed.
+    if let issue = config?.prePush.testOverrideIssue {
+        printWarn("test-override ignored: \(issue)")
+    }
+
     // Config-driven test override
     if let override = config?.prePush.testOverride {
         if override.skip {
