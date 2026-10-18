@@ -307,6 +307,22 @@ struct TestOutputParserTests {
     }
 
     @Test
+    func `detect no-op: SwiftPM package declares no test targets`() {
+        // Verbatim from `swift test` on a benchmark-only package (swift 6.4).
+        let lines = ["error: no tests found; create a target in the 'Tests' directory"]
+        #expect(TestOutputParser.detectNoOpExitReason(lines: lines) == .noSwiftPMTestTargets)
+    }
+
+    @Test
+    func `detect no-op returns nil for a genuine swift test failure`() {
+        let lines = [
+            "error: emit-module command failed with exit code 1",
+            "\u{10C25B}  Test run with 3 tests in 1 suite failed after 0.004 seconds with 1 issue.",
+        ]
+        #expect(TestOutputParser.detectNoOpExitReason(lines: lines) == nil)
+    }
+
+    @Test
     func `detect no-op returns nil for genuine test failure`() {
         let lines = [
             "Test Case '-[MyTests testFoo]' failed (0.012 seconds).",
@@ -322,7 +338,10 @@ struct TestOutputParserTests {
 
     @Test
     func `detect no-op humanDescription is non-empty`() {
-        for reason in [TestOutputParser.NoOpExitReason.noTestBundlesAvailable, .schemeTestActionNotConfigured] {
+        for reason in [
+            TestOutputParser.NoOpExitReason.noTestBundlesAvailable, .schemeTestActionNotConfigured,
+            .noSwiftPMTestTargets,
+        ] {
             #expect(!reason.humanDescription.isEmpty)
         }
     }

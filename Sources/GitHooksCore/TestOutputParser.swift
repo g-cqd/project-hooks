@@ -161,6 +161,10 @@ public enum TestOutputParser {
         /// `xcodebuild test -scheme X` exits 65 with this message when X has a
         /// TestAction with no Testables block. Same intent as the above.
         case schemeTestActionNotConfigured
+        /// `swift test` exits 1 with this message when the package declares no test targets, e.g. a
+        /// benchmark-only package nested in a repository. SwiftPM decides it from the evaluated
+        /// manifest, so no package with tests can match.
+        case noSwiftPMTestTargets
 
         public var humanDescription: String {
             switch self {
@@ -168,14 +172,16 @@ public enum TestOutputParser {
                     "the scheme exposes no test bundles"
                 case .schemeTestActionNotConfigured:
                     "the scheme has no test action configured"
+                case .noSwiftPMTestTargets:
+                    "the package declares no test targets"
             }
         }
     }
 
     /// Inspect test runner output and return a no-op reason if the runner exited.
     ///
-    /// non-zero but didn't actually fail any test. Currently scoped to xcodebuild;
-    /// `swift test` and `gradle test` propagate compile/test failures directly.
+    /// non-zero but didn't actually fail any test: a scheme or package with nothing to test.
+    /// Compile and test failures from every runner still propagate.
     public static func detectNoOpExitReason(lines: [String]) -> NoOpExitReason? {
         for line in lines {
             let trimmed = line.trimmingCharacters(in: .whitespaces)
@@ -184,6 +190,9 @@ public enum TestOutputParser {
             }
             if trimmed.contains("is not currently configured for the test action") {
                 return .schemeTestActionNotConfigured
+            }
+            if trimmed.hasPrefix("error: no tests found; create a target in the") {
+                return .noSwiftPMTestTargets
             }
         }
         return nil
