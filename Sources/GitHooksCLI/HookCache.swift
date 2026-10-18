@@ -36,11 +36,26 @@ enum HookCache {
                 repoRoot: repoRoot,
             ) ?? repoRoot
         let canonical = URL(fileURLWithPath: canonicalPath(commonDirectory))
-        let name =
-            canonical.lastPathComponent == ".git"
-            ? canonical.deletingLastPathComponent().lastPathComponent
-            : canonical.lastPathComponent
-        return "\(sanitized(name))-\(digest([canonical.path]).prefix(16))"
+        return "\(sanitized(directoryName(of: canonical)))-\(digest([canonical.path]).prefix(16))"
+    }
+
+    /// The repository's directory name, the same for all its worktrees.
+    ///
+    /// A verification worktree ends in this name, because SwiftPM names a path dependency after its directory: a
+    /// nested package that depends on `..` must see the same name in the hook as in the repository.
+    static func repositoryName(repoRoot: String) throws -> String {
+        let commonDirectory =
+            try gitFirstLine(
+                ["rev-parse", "--path-format=absolute", "--git-common-dir"],
+                repoRoot: repoRoot,
+            ) ?? repoRoot
+        return sanitized(directoryName(of: URL(fileURLWithPath: canonicalPath(commonDirectory))))
+    }
+
+    private static func directoryName(of commonDirectory: URL) -> String {
+        commonDirectory.lastPathComponent == ".git"
+            ? commonDirectory.deletingLastPathComponent().lastPathComponent
+            : commonDirectory.lastPathComponent
     }
 
     /// A hexadecimal SHA-256 of `parts`, each terminated by a NUL byte so that no two lists collide.

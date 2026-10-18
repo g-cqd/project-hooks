@@ -106,15 +106,24 @@ private struct PushedCommit {
 /// Where a trusted repository's pushed commits are checked out, where their builds go, and which results they reuse.
 private struct VerificationPlace {
     let repositoryKey: String
+    let repositoryName: String
     let buildCache = BuildCache.standard()
     let results = ResultCache.standard()
 
     init(repoRoot: String) throws {
         repositoryKey = try HookCache.repositoryKey(repoRoot: repoRoot)
+        repositoryName = try HookCache.repositoryName(repoRoot: repoRoot)
     }
 
     /// The same path for every push of the repository, so that builds see the same source paths each time.
+    ///
+    /// It ends in the repository's own directory name, which SwiftPM uses to name a path dependency on it.
     var worktreePath: String {
+        "\(HookCache.root)/worktrees/\(repositoryKey)/\(repositoryName)"
+    }
+
+    /// Where earlier versions put the worktree, now the directory that holds it.
+    var legacyWorktreePath: String {
         "\(HookCache.root)/worktrees/\(repositoryKey)"
     }
 
@@ -211,8 +220,16 @@ private func runTasksAndTests(
     }
 
     printSection("Tasks and tests: commit \(commit.sha.prefix(10)) (\(commit.refs.joined(separator: ", ")))")
+    if FileManager.default.fileExists(atPath: "\(place.legacyWorktreePath)/.git") {
+        // An earlier version's worktree occupies the directory that now holds the worktree.
+        VerificationWorktree(path: place.legacyWorktreePath, commit: commit.sha).remove(repoRoot: repoRoot)
+    }
     let worktree = try VerificationWorktree.create(commit: commit.sha, repoRoot: repoRoot, path: place.worktreePath)
-    defer { worktree.remove(repoRoot: repoRoot) }
+    defer {
+        worktree.remove(repoRoot: repoRoot)
+        // The directory that held it, which rmdir removes only when nothing else is in it.
+        _ = rmdir(place.legacyWorktreePath)
+    }
     let tree = try gitFirstLine(["rev-parse", "\(commit.sha)^{tree}"], repoRoot: repoRoot) ?? commit.sha
     let checkout = Checkout(root: worktree.path, tree: tree)
     // The commit's own tasks and test settings, which match its content, rather than the working tree's.
